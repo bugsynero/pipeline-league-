@@ -1,0 +1,33 @@
+import type { AdminUser, Announcement, AuditLog, DashboardSummary, DisciplineRecord, LeagueStanding, Match, MatchEvent, MatchEventType, Player, Team, TopScorer, TournamentSettings } from '../types'
+
+const base = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '')
+export class ApiRequestError extends Error {
+  constructor(message: string, readonly status?: number, readonly code?: string) { super(message); this.name = 'ApiRequestError' }
+}
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  if (!base) throw new ApiRequestError('The tournament API is not configured. Connect the backend to load or manage records.', undefined, 'API_NOT_CONFIGURED')
+  let response: Response
+  try { response = await fetch(`${base}${path}`, { ...init, credentials: 'include', headers: { accept: 'application/json', ...(init?.body ? { 'content-type': 'application/json' } : {}), ...init?.headers } }) }
+  catch { throw new ApiRequestError('The tournament service could not be reached. Check the backend connection and try again.', undefined, 'API_UNAVAILABLE') }
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { message?: string; code?: string } | null
+    throw new ApiRequestError(body?.message ?? `The request failed (${response.status}).`, response.status, body?.code)
+  }
+  if (response.status === 204) return undefined as T
+  return response.json() as Promise<T>
+}
+const json = (method: string, data?: unknown): RequestInit => ({ method, ...(data === undefined ? {} : { body: JSON.stringify(data) }) })
+const collection = <T, Input = Partial<T>>(path: string) => ({ list: (params?: URLSearchParams) => request<T[]>(`${path}${params?.size ? `?${params}` : ''}`), get: (id: string) => request<T>(`${path}/${encodeURIComponent(id)}`), create: (data: Input) => request<T>(path, json('POST', data)), update: (id: string, data: Partial<Input>) => request<T>(`${path}/${encodeURIComponent(id)}`, json('PATCH', data)), remove: (id: string) => request<void>(`${path}/${encodeURIComponent(id)}`, json('DELETE')) })
+export const api = {
+  teams: { ...collection<Team>('/teams'), setActive: (id: string, active: boolean) => request<Team>(`/teams/${encodeURIComponent(id)}/participation`, json('PATCH', { active })), uploadLogo: (id: string, file: File) => { const body = new FormData(); body.set('logo', file); return request<Team>(`/teams/${encodeURIComponent(id)}/logo`, { method: 'POST', body }) }, players: (id: string) => request<Player[]>(`/teams/${encodeURIComponent(id)}/players`) },
+  players: collection<Player>('/players'), fixtures: { ...collection<Match>('/fixtures'), reschedule: (id: string, data: Pick<Match, 'date' | 'time' | 'venue'>) => request<Match>(`/fixtures/${encodeURIComponent(id)}/reschedule`, json('POST', data)), cancel: (id: string, reason: string) => request<Match>(`/fixtures/${encodeURIComponent(id)}/cancel`, json('POST', { reason })) },
+  matches: { ...collection<Match>('/matches'), start: (id: string) => request<Match>(`/matches/${encodeURIComponent(id)}/start`, json('POST')), complete: (id: string) => request<Match>(`/matches/${encodeURIComponent(id)}/complete`, json('POST')), correct: (id: string, data: Partial<Match> & { reason: string }) => request<Match>(`/matches/${encodeURIComponent(id)}/corrections`, json('POST', data)), events: (id: string) => request<MatchEvent[]>(`/matches/${encodeURIComponent(id)}/events`), addEvent: (id: string, data: Omit<MatchEvent, 'id' | 'matchId'>) => request<MatchEvent>(`/matches/${encodeURIComponent(id)}/events`, json('POST', data)) },
+  standings: { list: () => request<LeagueStanding[]>('/standings') }, scorers: { list: () => request<TopScorer[]>('/statistics/scorers') }, discipline: { list: () => request<DisciplineRecord[]>('/statistics/discipline') },
+  announcements: { ...collection<Announcement>('/announcements'), publish: (id: string, published: boolean) => request<Announcement>(`/announcements/${encodeURIComponent(id)}/publish`, json('POST', { published })) },
+  settings: { get: () => request<TournamentSettings>('/settings'), update: (data: Partial<Omit<TournamentSettings, 'tournament'>> & { tournament?: Partial<TournamentSettings['tournament']> }) => request<TournamentSettings>('/settings', json('PATCH', data)) },
+  users: { ...collection<AdminUser>('/admin/users'), invite: (data: Pick<AdminUser, 'name' | 'email' | 'role'>) => request<AdminUser>('/admin/users/invitations', json('POST', data)), setRole: (id: string, role: AdminUser['role']) => request<AdminUser>(`/admin/users/${encodeURIComponent(id)}/role`, json('PATCH', { role })) },
+  auditLogs: { list: (params?: URLSearchParams) => request<AuditLog[]>(`/admin/audit-logs${params?.size ? `?${params}` : ''}`) }, dashboard: { summary: () => request<DashboardSummary>('/admin/dashboard') },
+  auth: { session: () => request<{ user: AdminUser; roles: string[] }>('/auth/session'), login: (email: string, password: string) => request<{ user: AdminUser }>('/auth/session', json('POST', { email, password })), logout: () => request<void>('/auth/session', json('DELETE')) },
+}
+export const API_CONTRACTS = { auth: { session: 'GET /auth/session', login: 'POST /auth/session { email, password }', logout: 'DELETE /auth/session' }, dashboard: 'GET /admin/dashboard', tournament: 'GET,PATCH /settings', teams: 'GET,POST /teams; GET,PATCH,DELETE /teams/:id; PATCH /teams/:id/participation; POST /teams/:id/logo; GET /teams/:id/players', players: 'GET,POST /players; GET,PATCH,DELETE /players/:id', fixtures: 'GET,POST /fixtures; GET,PATCH,DELETE /fixtures/:id; POST /fixtures/:id/reschedule; POST /fixtures/:id/cancel', matches: 'GET,POST /matches; GET,PATCH,DELETE /matches/:id; POST /matches/:id/start; POST /matches/:id/complete; POST /matches/:id/corrections', events: 'GET,POST /matches/:matchId/events', standings: 'GET /standings (server-calculated)', scorers: 'GET /statistics/scorers', discipline: 'GET /statistics/discipline', announcements: 'GET,POST /announcements; PATCH,DELETE /announcements/:id; POST /announcements/:id/publish', users: 'GET /admin/users; POST /admin/users/invitations; PATCH,DELETE /admin/users/:id; PATCH /admin/users/:id/role', auditLogs: 'GET /admin/audit-logs' } as const
+export type { MatchEventType }
