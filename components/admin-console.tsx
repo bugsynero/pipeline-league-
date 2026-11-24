@@ -64,8 +64,8 @@ export function AdminConsole() {
       else if (section === 'fixtures') editing ? await api.fixtures.update(editing.id, values as never) : await api.fixtures.create(values as never)
       else if (section === 'matches') editing ? await api.matches.update(editing.id, values as never) : await api.matches.create(values as never)
       else if (section === 'announcements') editing ? await api.announcements.update(editing.id, values as never) : await api.announcements.create(values as never)
-      else if (section === 'users') editing ? await api.users.update(editing.id, values as never) : await api.users.invite(values as never)
-      await refreshRecords(); setNotice(editing ? 'Changes saved.' : 'Record created.'); setFormOpen(false); setEditing(null)
+      else if (section === 'users') { if (editing) await api.users.update(editing.id, values as never); else { const invited = await api.users.invite(values as never); setNotice(`Administrator created. Share this temporary password securely: ${invited.temporaryPassword}`) } }
+      await refreshRecords(); if (section !== 'users' || editing) setNotice(editing ? 'Changes saved.' : 'Record created.'); setFormOpen(false); setEditing(null)
     } catch (saveError) { setFormError(saveError instanceof Error ? saveError.message : 'The record could not be saved.') }
     finally { setPending(false) }
   }
