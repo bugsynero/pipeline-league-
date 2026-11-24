@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
     const parsed = teamSchema.safeParse(await request.json())
     if (!parsed.success) return apiError(parsed.error)
     const team = await TeamModel.create(parsed.data)
-    await AuditLogModel.create({ actorId: team._id, actor: auth.user.email, action: 'team.created', resource: 'team', resourceId: String(team._id), metadata: { name: team.name } })
+    await AuditLogModel.create({ actorId: auth.user.id, actor: auth.user.email, action: 'team.created', resource: 'team', resourceId: String(team._id), metadata: { name: team.name } })
     return NextResponse.json(serialize(team), { status: 201 })
   } catch (error) { return apiError(error) }
 }
