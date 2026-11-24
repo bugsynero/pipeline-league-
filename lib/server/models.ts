@@ -12,7 +12,7 @@ const settingsSchema = new Schema({ key: { type: String, unique: true, default: 
 const auditSchema = new Schema({ actorId: { type: Schema.Types.ObjectId, ref: 'AdminUser' }, actor: String, action: { type: String, required: true }, resource: { type: String, required: true }, resourceId: String, metadata: Schema.Types.Mixed }, options)
 const sessionSchema = new Schema({ tokenHash: { type: String, required: true, unique: true }, adminId: { type: Schema.Types.ObjectId, ref: 'AdminUser', required: true, index: true }, expiresAt: { type: Date, required: true, expires: 0 } }, options)
 
-function model<T>(name: string, schema: Schema): Model<T> { return (mongoose.models[name] as Model<T>) || mongoose.model<T>(name, schema) }
+function model<T = any>(name: string, schema: Schema): Model<T> { return (mongoose.models[name] as Model<T>) || mongoose.model<T>(name, schema) }
 export const TeamModel = model('Team', teamSchema)
 export const PlayerModel = model('Player', playerSchema)
 export const MatchModel = model('Match', matchSchema)
