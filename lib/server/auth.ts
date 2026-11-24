@@ -28,7 +28,7 @@ export async function verifyPassword(password: string, encoded: string) {
 async function ensureBootstrapAdmin() {
   const email = process.env.ADMIN_BOOTSTRAP_EMAIL?.trim().toLowerCase()
   const password = process.env.ADMIN_BOOTSTRAP_PASSWORD
-  if (!email || !password) throw new Error('The first administrator has not been configured. Set ADMIN_BOOTSTRAP_EMAIL and ADMIN_BOOTSTRAP_PASSWORD.')
+  if (!email || !password) return
   const existing = await AdminUserModel.findOne({ email })
   if (existing) return
   const passwordHash = await hashPassword(password)
