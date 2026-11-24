@@ -10,7 +10,7 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 function serialize(team: any) {
-  return { id: String(team._id), name: team.name, initials: team.initials, active: team.active, ...(team.logoUrl ? { logoUrl: team.logoUrl } : {}), played: 0, wins: 0, draws: 0, losses: 0, gf: 0, ga: 0, points: 0, form: [] }
+  return { id: String(team._id), name: team.name, initials: team.initials, active: team.active, ...(team.logoUrl ? { logoUrl: team.logoUrl } : {}) }
 }
 
 export async function GET() {
