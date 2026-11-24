@@ -1,11 +1,10 @@
 import type { AdminUser, Announcement, AuditLog, DashboardSummary, DisciplineRecord, LeagueStanding, Match, MatchEvent, MatchEventType, Player, Team, TopScorer, TournamentSettings } from '../types'
 
-const base = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '')
+const base = (process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') || '/api')
 export class ApiRequestError extends Error {
   constructor(message: string, readonly status?: number, readonly code?: string) { super(message); this.name = 'ApiRequestError' }
 }
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  if (!base) throw new ApiRequestError('The tournament API is not configured. Connect the backend to load or manage records.', undefined, 'API_NOT_CONFIGURED')
   let response: Response
   try { response = await fetch(`${base}${path}`, { ...init, credentials: 'include', headers: { accept: 'application/json', ...(init?.body ? { 'content-type': 'application/json' } : {}), ...init?.headers } }) }
   catch { throw new ApiRequestError('The tournament service could not be reached. Check the backend connection and try again.', undefined, 'API_UNAVAILABLE') }
