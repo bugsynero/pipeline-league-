@@ -66,16 +66,16 @@ export async function GET(request: NextRequest, context: Ctx) {
   await connectToDatabase()
   const parts = (await context.params).resource
   const [resource,id,sub] = parts
+  if (resource==='matches' && id && sub==='events') {
+    if (!idOK(id)) return fail('Match not found.',404,'NOT_FOUND')
+    const rows=await MatchEventModel.find({matchId:id}).populate('playerId','name teamId number').sort({minute:1}).lean()
+    return json(rows.map((e:any)=>({id:String(e._id),matchId:String(e.matchId),playerId:String(e.playerId?._id??e.playerId),type:e.type,minute:e.minute,note:e.note,player:e.playerId})))
+  }
   if (resource==='fixtures' || resource==='matches') {
     const query: any = {}
     if (request.nextUrl.searchParams.get('status')) query.status=request.nextUrl.searchParams.get('status')
     const rows = await MatchModel.find(query).sort({ date:1,time:1 }).lean()
     return json(await Promise.all(rows.map(async m => { const [h,a]=await Promise.all([TeamModel.findById(m.homeId).lean(),TeamModel.findById(m.awayId).lean()]); return { ...matchOut(m), homeTeam:h?teamOut(h):null, awayTeam:a?teamOut(a):null } })))
-  }
-  if (resource==='matches' && id && sub==='events') {
-    if (!idOK(id)) return fail('Match not found.',404,'NOT_FOUND')
-    const rows=await MatchEventModel.find({matchId:id}).populate('playerId','name teamId number').sort({minute:1}).lean()
-    return json(rows.map((e:any)=>({id:String(e._id),matchId:String(e.matchId),playerId:String(e.playerId?._id??e.playerId),type:e.type,minute:e.minute,note:e.note,player:e.playerId})))
   }
   if (resource==='standings') { const s=await stats(); return json(s.standings) }
   if (resource==='statistics' && id==='scorers') { const rows=await playerStats(); return json(rows.filter(v=>v.goals>0).sort((a,b)=>b.goals-a.goals).map(v=>({...playerOut(v.player),goals:v.goals,assists:v.assists,appearances:v.appearances}))) }
@@ -88,6 +88,7 @@ export async function GET(request: NextRequest, context: Ctx) {
   }
   if (resource==='admin' && id==='audit-logs') { const rows=await AuditLogModel.find().sort({createdAt:-1}).limit(Math.min(Number(request.nextUrl.searchParams.get('limit'))||100,250)).lean(); return json(rows.map(a=>({id:String(a._id),actor:a.actor,action:a.action,resource:a.resource,resourceId:a.resourceId,createdAt:a.createdAt,metadata:a.metadata}))) }
   if (resource==='admin' && id==='users') { const a=await auth(request,'users'); if(a.response)return a.response; const rows=await AdminUserModel.find().select('-passwordHash').sort({createdAt:-1}).lean(); return json(rows.map(u=>({id:String(u._id),name:u.name,email:u.email,role:u.role,active:u.active}))) }
+  if (resource==='teams' && id && sub==='players') { const rows=await PlayerModel.find({teamId:id}).populate('teamId','name initials active').sort({number:1}).lean(); return json(rows.map(playerOut)) }
   if (resource==='teams') {
     const rows=await TeamModel.find(id?{_id:id}:{}).sort({name:1}).lean()
     if(id && !rows[0]) return fail('Team not found.',404,'NOT_FOUND')
@@ -98,7 +99,6 @@ export async function GET(request: NextRequest, context: Ctx) {
     if(id && !rows[0]) return fail('Player not found.',404,'NOT_FOUND')
     return json(id?playerOut(rows[0]):rows.map(playerOut))
   }
-  if (resource==='teams' && id && sub==='players') { const rows=await PlayerModel.find({teamId:id}).populate('teamId','name initials active').sort({number:1}).lean(); return json(rows.map(playerOut)) }
   return fail('API endpoint not found.',404,'NOT_FOUND')
  } catch(e) { return apiError(e) }
 }
@@ -127,6 +127,7 @@ export async function POST(request: NextRequest, context: Ctx) {
     if(resource==='teams') { if(!body.name||!body.initials)return fail('Team name and initials are required.'); const t=await TeamModel.create({name:String(body.name).trim(),initials:String(body.initials).trim().slice(0,4).toUpperCase(),active:body.active!==false}); await audit(a.user,'team.created','team',String(t._id)); return json(teamOut(t),201) }
     if(!body.name||!idOK(body.teamId)||!Number.isInteger(Number(body.number)))return fail('Player name, valid team and squad number are required.'); const p=await PlayerModel.create({name:String(body.name).trim(),teamId:body.teamId,number:Number(body.number)}); await audit(a.user,'player.created','player',String(p._id)); return json(playerOut(await p.populate('teamId','name initials active')),201)
   }
+  if(resource==='announcements' && id && sub==='publish') { const a=await auth(request,'content');if(a.response)return a.response;if(!idOK(id))return fail('Announcement not found.',404,'NOT_FOUND');const x=await AnnouncementModel.findByIdAndUpdate(id,{$set:{published:!!body.published,publishedAt:body.published?new Date():null}},{new:true});if(!x)return fail('Announcement not found.',404,'NOT_FOUND');await audit(a.user,'announcement.published','announcement',id,{published:!!body.published});return json({id:String(x._id),title:x.title,body:x.body,published:x.published,pinned:x.pinned,date:x.publishedAt??x.createdAt}) }
   if(resource==='announcements') { const a=await auth(request,'content');if(a.response)return a.response;if(!body.title||!body.body)return fail('Announcement title and body are required.');const x=await AnnouncementModel.create({title:body.title,body:body.body,pinned:!!body.pinned,published:false});await audit(a.user,'announcement.created','announcement',String(x._id));return json({id:String(x._id),title:x.title,body:x.body,published:x.published,pinned:x.pinned,date:x.createdAt},201) }
   if(resource==='admin'&&id==='users'&&sub==='invitations') { const a=await auth(request,'users');if(a.response)return a.response;if(!body.name||!body.email||!roles.includes(body.role)||!body.password||String(body.password).length<12)return fail('Name, email, valid role and a password of at least 12 characters are required.');const email=String(body.email).trim().toLowerCase();const exists=await AdminUserModel.exists({email});if(exists)return fail('An administrator with this email already exists.',409,'EMAIL_EXISTS');const u=await AdminUserModel.create({name:body.name,email,role:body.role,passwordHash:await hashPassword(String(body.password)),active:true});await audit(a.user,'admin.created','admin-user',String(u._id));return json({id:String(u._id),name:u.name,email:u.email,role:u.role,active:u.active},201) }
   return fail('API endpoint not found.',404,'NOT_FOUND')
@@ -136,9 +137,9 @@ export async function PATCH(request: NextRequest, context: Ctx) {
  try {
   await connectToDatabase(); const parts=(await context.params).resource;const [resource,id,sub]=parts;const body=await request.json()
   if(resource==='settings') { const a=await auth(request,'settings');if(a.response)return a.response;const current:any=await TournamentSettingsModel.findOne({key:'tournament'});const data={...current?.toObject(),...body,tournament:{...(current?.tournament?.toObject?.()??current?.tournament??{}),...(body.tournament??{})}};const saved=await TournamentSettingsModel.findOneAndUpdate({key:'tournament'},{$set:data},{new:true,upsert:true,runValidators:true});await audit(a.user,'settings.updated','settings','tournament');return json(saved) }
-  if(resource==='announcements') { const a=await auth(request,'content');if(a.response)return a.response;if(id==='publish'&&sub){} if(!idOK(id))return fail('Announcement not found.',404,'NOT_FOUND');const x=await AnnouncementModel.findByIdAndUpdate(id,{$set:body},{new:true,runValidators:true});if(!x)return fail('Announcement not found.',404,'NOT_FOUND');await audit(a.user,'announcement.updated','announcement',id);return json({id:String(x._id),title:x.title,body:x.body,published:x.published,pinned:x.pinned,date:x.publishedAt??x.createdAt}) }
+  if(resource==='announcements') { const a=await auth(request,'content');if(a.response)return a.response;if(!idOK(id))return fail('Announcement not found.',404,'NOT_FOUND');const x=await AnnouncementModel.findByIdAndUpdate(id,{$set:body},{new:true,runValidators:true});if(!x)return fail('Announcement not found.',404,'NOT_FOUND');await audit(a.user,'announcement.updated','announcement',id);return json({id:String(x._id),title:x.title,body:x.body,published:x.published,pinned:x.pinned,date:x.publishedAt??x.createdAt}) }
   if(resource==='teams'||resource==='players') { const a=await auth(request,resource as 'teams'|'players');if(a.response)return a.response;if(!idOK(id))return fail('Record not found.',404,'NOT_FOUND');const Model:any=resource==='teams'?TeamModel:PlayerModel;const data={...body};if(resource==='players'&&data.teamId&&!idOK(data.teamId))return fail('Invalid team.');const x=await Model.findByIdAndUpdate(id,{$set:data},{new:true,runValidators:true}).populate?.(resource==='players'?'teamId':'')??await Model.findById(id);if(!x)return fail('Record not found.',404,'NOT_FOUND');await audit(a.user,resource.slice(0,-1)+'.updated',resource,id);return json(resource==='teams'?teamOut(x):playerOut(x)) }
-  if(resource==='admin'&&id==='users'&&sub==='role') { const a=await auth(request,'users');if(a.response)return a.response;if(!idOK(sub))return fail('Invalid user id.'); }
+  if(resource==='admin'&&id==='users'&&sub==='role') { const a=await auth(request,'users');if(a.response)return a.response;const userId=request.nextUrl.searchParams.get('userId')??body.id;if(!userId||!idOK(userId)||!roles.includes(body.role))return fail('Valid administrator id and role are required.');const u=await AdminUserModel.findByIdAndUpdate(userId,{$set:{role:body.role}},{new:true});if(!u)return fail('Administrator not found.',404,'NOT_FOUND');await audit(a.user,'admin.role.updated','admin-user',userId,{role:body.role});return json({id:String(u._id),name:u.name,email:u.email,role:u.role,active:u.active}) }
   if(resource==='admin'&&id==='users') { const a=await auth(request,'users');if(a.response)return a.response;if(!idOK(sub)||!roles.includes(body.role))return fail('Valid administrator id and role are required.');const u=await AdminUserModel.findByIdAndUpdate(sub,{$set:{role:body.role}},{new:true});if(!u)return fail('Administrator not found.',404,'NOT_FOUND');await audit(a.user,'admin.role.updated','admin-user',sub,{role:body.role});return json({id:String(u._id),name:u.name,email:u.email,role:u.role,active:u.active}) }
   if(resource==='matches'&&id&&sub==='') { const a=await auth(request,'matches');if(a.response)return a.response;if(!idOK(id))return fail('Match not found.',404,'NOT_FOUND');const m=await MatchModel.findByIdAndUpdate(id,{$set:{...body,homeId:body.homeId,awayId:body.awayId}},{new:true,runValidators:true});if(!m)return fail('Match not found.',404,'NOT_FOUND');await audit(a.user,'match.updated','match',id);return json(matchOut(m)) }
   return fail('API endpoint not found.',404,'NOT_FOUND')
