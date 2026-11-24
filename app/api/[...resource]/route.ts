@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { isValidObjectId } from 'mongoose'
+import { randomBytes } from 'node:crypto'
 import { connectToDatabase } from '@/lib/server/db'
 import { requireAdmin, canManage, type AdminRole } from '@/lib/server/authorization'
 import { hashPassword } from '@/lib/server/auth'
+import { seedTournamentDefaults } from '@/lib/server/seed'
 import { apiError } from '@/lib/server/http'
 import { TeamModel, PlayerModel, MatchModel, MatchEventModel, AnnouncementModel, TournamentSettingsModel, AdminUserModel, AuditLogModel } from '@/lib/server/models'
 
@@ -72,15 +74,17 @@ export async function GET(request: NextRequest, context: Ctx) {
     return json(rows.map((e:any)=>({id:String(e._id),matchId:String(e.matchId),playerId:String(e.playerId?._id??e.playerId),type:e.type,minute:e.minute,note:e.note,player:e.playerId})))
   }
   if (resource==='fixtures' || resource==='matches') {
-    const query: any = {}
+    const query: any = id ? { _id:id } : {}
     if (request.nextUrl.searchParams.get('status')) query.status=request.nextUrl.searchParams.get('status')
     const rows = await MatchModel.find(query).sort({ date:1,time:1 }).lean()
-    return json(await Promise.all(rows.map(async m => { const [h,a]=await Promise.all([TeamModel.findById(m.homeId).lean(),TeamModel.findById(m.awayId).lean()]); return { ...matchOut(m), homeTeam:h?teamOut(h):null, awayTeam:a?teamOut(a):null } })))
+    if(id && !rows[0]) return fail('Match not found.',404,'NOT_FOUND')
+    const output=await Promise.all(rows.map(async m => { const [h,a]=await Promise.all([TeamModel.findById(m.homeId).lean(),TeamModel.findById(m.awayId).lean()]); return { ...matchOut(m), homeTeam:h?teamOut(h):null, awayTeam:a?teamOut(a):null } }))
+    return json(id?output[0]:output)
   }
   if (resource==='standings') { const s=await stats(); return json(s.standings) }
   if (resource==='statistics' && id==='scorers') { const rows=await playerStats(); return json(rows.filter(v=>v.goals>0).sort((a,b)=>b.goals-a.goals).map(v=>({...playerOut(v.player),goals:v.goals,assists:v.assists,appearances:v.appearances}))) }
   if (resource==='statistics' && id==='discipline') { const rows=await playerStats(); return json(rows.filter(v=>v.yellow||v.red).sort((a,b)=>b.red-a.red||b.yellow-a.yellow).map(v=>({...playerOut(v.player),yellow:v.yellow,red:v.red, yellowCards:v.yellow,redCards:v.red}))) }
-  if (resource==='settings') { const s=await TournamentSettingsModel.findOne({key:'tournament'}).lean(); return json(s ?? {}) }
+  if (resource==='settings') { await seedTournamentDefaults(); const s=await TournamentSettingsModel.findOne({key:'tournament'}).lean(); return json(s ?? {}) }
   if (resource==='announcements') { const rows=await AnnouncementModel.find(id?{_id:id}:{published:true}).sort({pinned:-1,publishedAt:-1,createdAt:-1}).lean(); return json(id ? (rows[0]??null) : rows.map(a=>({id:String(a._id),title:a.title,body:a.body,date:a.publishedAt??a.createdAt,published:a.published,pinned:a.pinned}))) }
   if (resource==='admin' && id==='dashboard') {
     const gate=await auth(request,'statistics'); if(gate.response)return gate.response
@@ -130,7 +134,7 @@ export async function POST(request: NextRequest, context: Ctx) {
   }
   if(resource==='announcements' && id && sub==='publish') { const a=await auth(request,'content');if(a.response)return a.response;if(!idOK(id))return fail('Announcement not found.',404,'NOT_FOUND');const x=await AnnouncementModel.findByIdAndUpdate(id,{$set:{published:!!body.published,publishedAt:body.published?new Date():null}},{new:true});if(!x)return fail('Announcement not found.',404,'NOT_FOUND');await audit(a.user,'announcement.published','announcement',id,{published:!!body.published});return json({id:String(x._id),title:x.title,body:x.body,published:x.published,pinned:x.pinned,date:x.publishedAt??x.createdAt}) }
   if(resource==='announcements') { const a=await auth(request,'content');if(a.response)return a.response;if(!body.title||!body.body)return fail('Announcement title and body are required.');const x=await AnnouncementModel.create({title:body.title,body:body.body,pinned:!!body.pinned,published:false});await audit(a.user,'announcement.created','announcement',String(x._id));return json({id:String(x._id),title:x.title,body:x.body,published:x.published,pinned:x.pinned,date:x.createdAt},201) }
-  if(resource==='admin'&&id==='users'&&sub==='invitations') { const a=await auth(request,'users');if(a.response)return a.response;if(!body.name||!body.email||!roles.includes(body.role)||!body.password||String(body.password).length<12)return fail('Name, email, valid role and a password of at least 12 characters are required.');const email=String(body.email).trim().toLowerCase();const exists=await AdminUserModel.exists({email});if(exists)return fail('An administrator with this email already exists.',409,'EMAIL_EXISTS');const u=await AdminUserModel.create({name:body.name,email,role:body.role,passwordHash:await hashPassword(String(body.password)),active:true});await audit(a.user,'admin.created','admin-user',String(u._id));return json({id:String(u._id),name:u.name,email:u.email,role:u.role,active:u.active},201) }
+  if(resource==='admin'&&id==='users'&&sub==='invitations') { const a=await auth(request,'users');if(a.response)return a.response;if(!body.name||!body.email||!roles.includes(body.role))return fail('Name, email and a valid role are required.');const temporaryPassword=body.password?String(body.password):randomBytes(18).toString('base64url');if(temporaryPassword.length<12)return fail('Administrator password must contain at least 12 characters.');const email=String(body.email).trim().toLowerCase();const exists=await AdminUserModel.exists({email});if(exists)return fail('An administrator with this email already exists.',409,'EMAIL_EXISTS');const u=await AdminUserModel.create({name:body.name,email,role:body.role,passwordHash:await hashPassword(temporaryPassword),active:true});await audit(a.user,'admin.created','admin-user',String(u._id));return json({id:String(u._id),name:u.name,email:u.email,role:u.role,active:u.active,temporaryPassword},201) }
   return fail('API endpoint not found.',404,'NOT_FOUND')
  } catch(e) { return apiError(e) }
 }
