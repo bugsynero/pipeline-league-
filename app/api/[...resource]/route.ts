@@ -154,6 +154,17 @@ export async function PATCH(request: NextRequest, context: Ctx) {
 export async function DELETE(request: NextRequest, context: Ctx) {
  try {
   await connectToDatabase();const parts=(await context.params).resource;const [resource,id,sub]=parts
+  if(resource==='matches' && id && sub==='events' && parts[3]) {
+   const a=await auth(request,'matches');if(a.response)return a.response
+   const eventId=parts[3];if(!idOK(id)||!idOK(eventId))return fail('Match event not found.',404,'NOT_FOUND')
+   const match=await MatchModel.findById(id);if(!match)return fail('Match not found.',404,'NOT_FOUND')
+   if(match.status==='completed'&&match.confirmedAt)return fail('Events on a confirmed result cannot be changed. Correct the result through the audited score-correction workflow.',409,'CONFIRMED_RESULT_PROTECTED')
+   const event=await MatchEventModel.findOne({_id:eventId,matchId:id}).populate('playerId','teamId')
+   if(!event)return fail('Match event not found.',404,'NOT_FOUND')
+   if(event.type==='goal'||event.type==='own_goal'){const player:any=event.playerId;const teamId=String(player?.teamId);const homeScored=(event.type==='goal'&&teamId===String(match.homeId))||(event.type==='own_goal'&&teamId===String(match.awayId));const field=homeScored?'homeScore':'awayScore';match.set(field,Math.max(0,Number(match.get(field)??0)-1));await match.save()}
+   await MatchEventModel.deleteOne({_id:eventId,matchId:id});await audit(a.user,'match.event.deleted','match-event',eventId,{matchId:id,type:event.type})
+   return new NextResponse(null,{status:204})
+  }
   if(resource==='teams'||resource==='players'||resource==='matches'||resource==='fixtures'||resource==='announcements') {
    const area=resource==='announcements'?'content':resource==='teams'?'teams':resource==='players'?'players':resource==='fixtures'?'fixtures':'matches';const a=await auth(request,area);if(a.response)return a.response
    if(!idOK(id))return fail('Record not found.',404,'NOT_FOUND')
