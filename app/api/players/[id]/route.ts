@@ -9,7 +9,7 @@ export const runtime = 'nodejs'
 type Context = { params: Promise<{ id: string }> }
 function serialize(player: any) {
   const team = player.teamId && typeof player.teamId === 'object' ? player.teamId : null
-  return { id: String(player._id), name: player.name, teamId: String(team?._id ?? player.teamId), number: player.number, appearances: 0, goals: 0, assists: 0, yellowCards: 0, redCards: 0, ...(team ? { team: { id: String(team._id), name: team.name, initials: team.initials, active: team.active } } : {}) }
+  return { id: String(player._id), name: player.name, teamId: String(team?._id ?? player.teamId), number: player.number, ...(team ? { team: { id: String(team._id), name: team.name, initials: team.initials, active: team.active } } : {}) }
 }
 export async function GET(_request: NextRequest, { params }: Context) {
   try {
