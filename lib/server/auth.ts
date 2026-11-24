@@ -26,11 +26,11 @@ export async function verifyPassword(password: string, encoded: string) {
 }
 
 async function ensureBootstrapAdmin() {
-  const existing = await AdminUserModel.findOne({ email: process.env.ADMIN_BOOTSTRAP_EMAIL?.trim().toLowerCase() })
-  if (existing) return
   const email = process.env.ADMIN_BOOTSTRAP_EMAIL?.trim().toLowerCase()
   const password = process.env.ADMIN_BOOTSTRAP_PASSWORD
   if (!email || !password) throw new Error('The first administrator has not been configured. Set ADMIN_BOOTSTRAP_EMAIL and ADMIN_BOOTSTRAP_PASSWORD.')
+  const existing = await AdminUserModel.findOne({ email })
+  if (existing) return
   const passwordHash = await hashPassword(password)
   try {
     await AdminUserModel.create({ name: 'Tournament Super Admin', email, passwordHash, role: 'super_admin', active: true })
