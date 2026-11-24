@@ -17,6 +17,6 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const team = await TeamModel.findByIdAndUpdate(id, { $set: { active: body.active } }, { new: true, runValidators: true })
     if (!team) return NextResponse.json({ code: 'NOT_FOUND', message: 'Team not found.' }, { status: 404 })
     await AuditLogModel.create({ actorId: auth.user.id, actor: auth.user.email, action: 'team.participation_updated', resource: 'team', resourceId: id, metadata: { active: body.active } })
-    return NextResponse.json({ id: String(team._id), name: team.name, initials: team.initials, active: team.active, played: 0, wins: 0, draws: 0, losses: 0, gf: 0, ga: 0, points: 0, form: [] })
+    return NextResponse.json({ id: String(team._id), name: team.name, initials: team.initials, active: team.active })
   } catch (error) { return apiError(error) }
 }
