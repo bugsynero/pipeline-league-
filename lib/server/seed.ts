@@ -22,7 +22,7 @@ export async function seedTournamentDefaults() {
         venue: 'Pipeline Field',
         startDate: '2026-11-23',
         kickOff: '16:00',
-        status: 'upcoming',
+        status: 'ongoing',
         format: 'round_robin',
       },
       points: { win: 3, draw: 1, loss: 0 },
