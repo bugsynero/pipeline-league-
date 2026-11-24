@@ -31,4 +31,5 @@ export async function seedTournamentDefaults() {
     } },
     { upsert: true },
   )
+  await TournamentSettingsModel.updateOne({ key: 'tournament', 'tournament.status': 'upcoming' }, { $set: { 'tournament.status': 'ongoing' } })
 }
