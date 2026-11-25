@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
     await connectToDatabase()
     const auth = await requireAdmin(request)
     if (!auth.user) return NextResponse.json(auth.response, { status: auth.status })
-    const allowed = ['players', 'content', 'matches'].some(area => canManage(auth.user!.role, area as 'players' | 'content' | 'matches'))
+    const allowed = ['teams', 'players', 'content', 'matches'].some(area => canManage(auth.user!.role, area as 'teams' | 'players' | 'content' | 'matches'))
     if (!allowed) return NextResponse.json({ code: 'FORBIDDEN', message: 'Your role cannot upload tournament images.' }, { status: 403 })
 
     const file = (await request.formData()).get('file')
