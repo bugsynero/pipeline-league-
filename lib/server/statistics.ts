@@ -110,12 +110,12 @@ export async function getManualPlayerStatistics(includeZero = true) {
     PlayerModel.find().populate('teamId', 'name initials active logoUrl').sort({ name: 1 }).lean(),
     PlayerTournamentStatsModel.find().lean(),
   ])
-  const byPlayer = new Map(records.map(record => [String(record.playerId), record]))
+  const byPlayer = new Map(records.map(record => [String(record.playerId), record] as const))
   const suspensionIds = records.map(record => record.suspendedForMatchId).filter(Boolean)
   const matches = suspensionIds.length
     ? await MatchModel.find({ _id: { $in: suspensionIds } }).populate('homeId', 'name').populate('awayId', 'name').lean()
     : []
-  const matchById = new Map(matches.map(match => [String(match._id), match]))
+  const matchById = new Map(matches.map(match => [String(match._id), match] as const))
   const rows = players.map((player: any) => {
     const record: any = byPlayer.get(String(player._id))
     const team = player.teamId && typeof player.teamId === 'object'
