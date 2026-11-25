@@ -12,6 +12,6 @@ export interface DisciplineRecord extends Player { yellowCards: number; redCards
 export interface Announcement { id: string; title: string; body: string; date: string; published: boolean; pinned: boolean }
 export interface AdminUser { id: string; name: string; email: string; role: AdminRole; active: boolean }
 export interface AuditLog { id: string; actor: string; action: string; resource: string; resourceId: string; createdAt: string; metadata?: Record<string, unknown> }
-export interface TournamentSettings { tournament: Tournament; points: { win: number; draw: number; loss: number }; tieBreakers: string[]; contactEmail?: string; rules?: string }
+export interface TournamentSettings { tournament: Tournament; points: { win: number; draw: number; loss: number }; tieBreakers: string[]; contactEmail?: string; organizerPhone?: string; rules?: string }
 export interface DashboardSummary { teams: number; players: number; matches: number; goals: number; upcoming: Match[]; recentResults: Match[]; recentActivity: AuditLog[] }
 export interface ApiError { code: string; message: string; details?: unknown }
