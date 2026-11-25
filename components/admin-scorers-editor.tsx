@@ -27,7 +27,7 @@ export function AdminScorersEditor({ rows, loading, error, refresh }: { rows: Sc
     setDirty(current => ({ ...current, [id]: true }))
   }
   async function save(player: ScorerRow) {
-    const value = values[player.id]
+    const value = values[player.id] ?? { goals: player.goals, assists: player.assists, appearances: player.appearances, reason: '' }
     setBusy(player.id); setProblem(''); setMessage('')
     try {
       await api.playerStatistics.update(player.id, { goals: value.goals, assists: value.assists, appearances: value.appearances, ...(value.reason.trim() ? { reason: value.reason.trim() } : {}) })
