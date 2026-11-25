@@ -18,8 +18,8 @@ const fail = (message: string, status = 400, code = 'INVALID_REQUEST') => json({
 const idOK = (id: string) => isValidObjectId(id)
 const plain = (v: any) => v?.toObject ? v.toObject() : v
 const teamOut = (t: any) => ({ id: String(t._id), name: t.name, initials: t.initials, active: t.active, ...(t.logoUrl ? { logoUrl: t.logoUrl } : {}) })
-const playerOut = (p: any) => { const t = p.teamId && typeof p.teamId === 'object' ? p.teamId : null; return { id: String(p._id), name: p.name, teamId: String(t?._id ?? p.teamId), number: p.number, ...(t ? { team: teamOut(t) } : {}) } }
-const matchOut = (m: any) => ({ id: String(m._id), homeId: String(m.homeId?._id ?? m.homeId), awayId: String(m.awayId?._id ?? m.awayId), date: m.date, time: m.time, venue: m.venue, round: m.round, status: m.status, ...(m.homeScore != null ? { homeScore: m.homeScore } : {}), ...(m.awayScore != null ? { awayScore: m.awayScore } : {}) })
+const playerOut = (p: any) => { const t = p.teamId && typeof p.teamId === 'object' ? p.teamId : null; return { id: String(p._id), name: p.name, teamId: String(t?._id ?? p.teamId), number: p.number, ...(p.photoUrl ? { photoUrl: p.photoUrl } : {}), ...(t ? { team: teamOut(t) } : {}) } }
+const matchOut = (m: any) => ({ id: String(m._id), homeId: String(m.homeId?._id ?? m.homeId), awayId: String(m.awayId?._id ?? m.awayId), date: m.date, time: m.time, venue: m.venue, round: m.round, status: m.status, ...(m.homeScore != null ? { homeScore: m.homeScore } : {}), ...(m.awayScore != null ? { awayScore: m.awayScore } : {}), ...(m.resultHeadline ? { resultHeadline: m.resultHeadline } : {}), ...(m.resultSummary ? { resultSummary: m.resultSummary } : {}), ...(m.highlightImageUrl ? { highlightImageUrl: m.highlightImageUrl } : {}), featured: Boolean(m.featured) })
 async function audit(user: any, action: string, resource: string, resourceId = '', metadata: any = {}) { await AuditLogModel.create({ actorId: user.id, actor: user.email, action, resource, resourceId, metadata }) }
 async function auth(request: NextRequest, area: Parameters<typeof canManage>[1]) {
   const a = await requireAdmin(request)
@@ -48,7 +48,7 @@ async function stats() {
   return { standings: standings.map((s,i)=>({ position:i+1,...s })), matches }
 }
 async function playerStats() {
-  const events = await MatchEventModel.find().populate({ path: 'playerId', select: 'name teamId number', populate: { path: 'teamId', select: 'name initials active' } }).lean()
+  const events = await MatchEventModel.find().populate({ path: 'playerId', select: 'name teamId number photoUrl', populate: { path: 'teamId', select: 'name initials active' } }).lean()
   const confirmed = await MatchModel.find({ status:'completed', confirmedAt:{ $exists:true } }).select('_id homeId awayId').lean()
   const valid = new Set(confirmed.map(m=>String(m._id)))
   const totals = new Map<string, any>()
