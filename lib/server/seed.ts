@@ -23,7 +23,7 @@ export async function seedTournamentDefaults() {
         startDate: '2026-11-23',
         kickOff: '16:00',
         status: 'ongoing',
-        format: 'round_robin',
+        format: 'To be confirmed',
       },
       points: { win: 3, draw: 1, loss: 0 },
       tieBreakers: ['points', 'goalDifference', 'goalsFor'],
@@ -31,5 +31,4 @@ export async function seedTournamentDefaults() {
     } },
     { upsert: true },
   )
-  await TournamentSettingsModel.updateOne({ key: 'tournament', 'tournament.status': 'upcoming' }, { $set: { 'tournament.status': 'ongoing' } })
 }
