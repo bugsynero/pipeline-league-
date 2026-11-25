@@ -9,14 +9,14 @@ export const runtime = 'nodejs'
 type Context = { params: Promise<{ id: string }> }
 function serialize(player: any) {
   const team = player.teamId && typeof player.teamId === 'object' ? player.teamId : null
-  return { id: String(player._id), name: player.name, teamId: String(team?._id ?? player.teamId), number: player.number, ...(team ? { team: { id: String(team._id), name: team.name, initials: team.initials, active: team.active } } : {}) }
+  return { id: String(player._id), name: player.name, teamId: String(team?._id ?? player.teamId), number: player.number, ...(player.photoUrl ? { photoUrl: player.photoUrl } : {}), ...(team ? { team: { id: String(team._id), name: team.name, initials: team.initials, active: team.active } } : {}) }
 }
 export async function GET(_request: NextRequest, { params }: Context) {
   try {
     await connectToDatabase()
     const { id } = await params
     if (!isValidObjectId(id)) return NextResponse.json({ code: 'NOT_FOUND', message: 'Player not found.' }, { status: 404 })
-    const player = await PlayerModel.findById(id).populate('teamId', 'name initials active').lean()
+    const player = await PlayerModel.findById(id).populate('teamId', 'name initials active logoUrl').lean()
     if (!player) return NextResponse.json({ code: 'NOT_FOUND', message: 'Player not found.' }, { status: 404 })
     return NextResponse.json(serialize(player))
   } catch (error) { return apiError(error) }
@@ -31,7 +31,7 @@ export async function PATCH(request: NextRequest, { params }: Context) {
     const parsed = playerSchema.partial().safeParse(await request.json())
     if (!parsed.success) return apiError(parsed.error)
     if (parsed.data.teamId && (!isValidObjectId(parsed.data.teamId) || !(await TeamModel.exists({ _id: parsed.data.teamId })))) return NextResponse.json({ code: 'INVALID_TEAM', message: 'Select an existing team.' }, { status: 400 })
-    const player = await PlayerModel.findByIdAndUpdate(id, { $set: parsed.data }, { new: true, runValidators: true }).populate('teamId', 'name initials active')
+    const player = await PlayerModel.findByIdAndUpdate(id, { $set: parsed.data }, { new: true, runValidators: true }).populate('teamId', 'name initials active logoUrl')
     if (!player) return NextResponse.json({ code: 'NOT_FOUND', message: 'Player not found.' }, { status: 404 })
     await AuditLogModel.create({ actorId: auth.user.id, actor: auth.user.email, action: 'player.updated', resource: 'player', resourceId: id, metadata: parsed.data })
     return NextResponse.json(serialize(player))
