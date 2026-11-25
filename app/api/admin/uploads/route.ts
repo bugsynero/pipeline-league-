@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
     const file = (await request.formData()).get('file')
     if (!(file instanceof File)) return NextResponse.json({ code: 'FILE_REQUIRED', message: 'Choose an image file to upload.' }, { status: 400 })
     if (!ALLOWED_TYPES.has(file.type)) return NextResponse.json({ code: 'INVALID_IMAGE_TYPE', message: 'Use JPG, PNG, WEBP or GIF images.' }, { status: 400 })
-    if (file.size < 1 || file.size > MAX_BYTES) return NextResponse.json({ code: 'INVALID_IMAGE_SIZE', message: 'Images must be smaller than 6 MB.' }, { status: 400 })
+    if (file.size < 1 || file.size > MAX_BYTES) return NextResponse.json({ code: 'INVALID_IMAGE_SIZE', message: 'Images must be 4 MB or smaller.' }, { status: 400 })
 
     const cloudName = process.env.CLOUDINARY_CLOUD_NAME
     const apiKey = process.env.CLOUDINARY_API_KEY
