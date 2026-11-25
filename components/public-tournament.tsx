@@ -1,5 +1,6 @@
 'use client'
 
+import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
@@ -49,6 +50,7 @@ function Footer() {
   const [activePartnerSlide, setActivePartnerSlide] = useState(0)
   const totalPartnerSlides = 3
   useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
     const timer = window.setInterval(() => {
       setActivePartnerSlide(current => (current + 1) % totalPartnerSlides)
     }, 6500)
@@ -66,7 +68,7 @@ function Footer() {
       </div>
       <div className="partner-carousel" aria-roledescription="carousel" aria-label="Sponsors and advertising opportunities">
         <div className="partner-slide" key={activePartnerSlide} aria-live="off">
-          {activePartnerSlide === 0 ? <div className="partner-feature-logo"><a href="https://ifybugsydtech.com" target="_blank" rel="noreferrer" aria-label="Visit Ifybugsy Digital Technologies website"><img src="/ifybugsy-logo.png" alt="Ifybugsy Digital Technologies" width="375" height="102"/></a></div> :
+          {activePartnerSlide === 0 ? <div className="partner-feature-logo"><a href="https://ifybugsydtech.com" target="_blank" rel="noreferrer" aria-label="Visit Ifybugsy Digital Technologies website"><Image src="/ifybugsy-logo.png" alt="Ifybugsy Digital Technologies" width={375} height={102}/></a></div> :
           <div className={'partner-ad-art partner-ad-art-' + activePartnerSlide}><span className="partner-ad-orbit"/><span className="partner-ad-number">0{activePartnerSlide}</span><span className="partner-ad-label">ADVERTISING SPACE</span></div>}
           <div className="partner-slide-copy">
             <span className="partner-slide-kicker">{activePartnerSlide === 0 ? 'OFFICIAL DIGITAL PARTNER' : 'FEATURED AD SPACE 0' + activePartnerSlide}</span>
@@ -83,7 +85,7 @@ function Footer() {
       <nav className="footer-links" aria-label="Footer navigation">{footerLinks.map(([label, href]) => <Link key={href} href={href}>{label}</Link>)}</nav>
     </div>
     <div className="footer-bottom">
-      <div className="footer-company-credit"><a href="https://ifybugsydtech.com" target="_blank" rel="noreferrer"><img src="/ifybugsy-logo.png" alt="Ifybugsy Digital Technologies Limited logo" width="375" height="102"/><span><small>Website designed & developed by</small><b>Ifybugsy Digital Technologies Limited</b><small className="footer-company-link">Visit ifybugsydtech.com <ArrowRight/></small></span></a></div>
+      <div className="footer-company-credit"><a href="https://ifybugsydtech.com" target="_blank" rel="noreferrer"><Image src="/ifybugsy-logo.png" alt="Ifybugsy Digital Technologies Limited logo" width={375} height={102}/><span><small>Website designed & developed by</small><b>Ifybugsy Digital Technologies Limited</b><small className="footer-company-link">Visit ifybugsydtech.com <ArrowRight/></small></span></a></div>
       <div className="footer-social-wrap"><span className="eyebrow">FOLLOW THE TOURNAMENT</span><div className="footer-social" aria-label="Social media channels"><span title="Facebook page link coming soon"><Facebook/></span><span title="Instagram page link coming soon"><Instagram/></span><span title="YouTube channel link coming soon"><Youtube/></span></div><small>Official social links will be added when the pages are confirmed.</small></div>
       <span className="copyright">© 2026 Pipeline Annual Football Tournament. All rights reserved.</span>
     </div>
