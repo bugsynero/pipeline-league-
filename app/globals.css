@@ -215,3 +215,8 @@
   .match-card-image{height:115px}
 }
 @media(prefers-reduced-motion:reduce){.news-spotlight-slide{animation:none}.news-slider-controls button,.news-slider-dots button,.button-publish{transition:none}}
+
+/* Compact one-click controls for manual tournament statistics */
+.admin-stat-control{display:flex;align-items:center;gap:6px;min-width:112px}
+.admin-stat-control input{min-width:56px;width:100%;max-width:76px}
+.admin-quick-increment{flex:0 0 auto;min-width:34px;padding:7px 9px;font-size:10px;font-weight:800}
