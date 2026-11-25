@@ -13,6 +13,7 @@ const auditSchema = new Schema({ actorId: { type: Schema.Types.ObjectId, ref: 'A
 const sessionSchema = new Schema({ tokenHash: { type: String, required: true, unique: true }, adminId: { type: Schema.Types.ObjectId, ref: 'AdminUser', required: true, index: true }, expiresAt: { type: Date, required: true, expires: 0 } }, options)
 const standingRowSchema = new Schema({ teamId: { type: Schema.Types.ObjectId, ref: 'Team', required: true }, position: { type: Number, required: true, min: 1 }, played: { type: Number, required: true, min: 0 }, wins: { type: Number, required: true, min: 0 }, draws: { type: Number, required: true, min: 0 }, losses: { type: Number, required: true, min: 0 }, gf: { type: Number, required: true, min: 0 }, ga: { type: Number, required: true, min: 0 }, points: { type: Number, required: true, min: 0 } }, { _id: false })
 const standingsPublicationSchema = new Schema({ key: { type: String, unique: true, default: 'current' }, draftRows: { type: [standingRowSchema], default: [] }, publishedRows: { type: [standingRowSchema], default: [] }, draftUpdatedAt: Date, draftUpdatedBy: String, publishedAt: Date, publishedBy: String }, options)
+const playerTournamentStatsSchema = new Schema({ playerId: { type: Schema.Types.ObjectId, ref: 'Player', required: true, unique: true, index: true }, goals: { type: Number, default: 0, min: 0, max: 999 }, assists: { type: Number, default: 0, min: 0, max: 999 }, appearances: { type: Number, default: 0, min: 0, max: 999 }, yellowCards: { type: Number, default: 0, min: 0, max: 99 }, redCards: { type: Number, default: 0, min: 0, max: 99 }, suspendedForMatchId: { type: Schema.Types.ObjectId, ref: 'Match', default: null }, reason: { type: String, trim: true, maxlength: 500 }, updatedBy: String }, options)
 const disciplineOverrideSchema = new Schema({ playerId: { type: Schema.Types.ObjectId, ref: 'Player', required: true, unique: true, index: true }, yellowCards: { type: Number, required: true, min: 0, max: 99 }, redCards: { type: Number, required: true, min: 0, max: 99 }, reason: { type: String, required: true, maxlength: 500 }, updatedBy: { type: String, required: true } }, options)
 
 
@@ -25,6 +26,7 @@ export const AdminUserModel = model('AdminUser', adminSchema)
 export const AnnouncementModel = model('Announcement', announcementSchema)
 export const StandingsPublicationModel = model('StandingsPublication', standingsPublicationSchema)
 export const DisciplineOverrideModel = model('DisciplineOverride', disciplineOverrideSchema)
+export const PlayerTournamentStatsModel = model('PlayerTournamentStats', playerTournamentStatsSchema)
 export const TournamentSettingsModel = model('TournamentSettings', settingsSchema)
 export const AuditLogModel = model('AuditLog', auditSchema)
 export const AdminSessionModel = model('AdminSession', sessionSchema)
