@@ -10,7 +10,7 @@ const teamOut = (team: any) => ({
 
 export async function calculateStandings() {
   const [teams, matches, settings] = await Promise.all([
-    TeamModel.find().sort({ name: 1 }).lean(),
+    TeamModel.find({ active: true }).sort({ name: 1 }).lean(),
     MatchModel.find({ status: 'completed', confirmedAt: { $exists: true } }).sort({ confirmedAt: 1 }).lean(),
     TournamentSettingsModel.findOne({ key: 'tournament' }).lean(),
   ])
@@ -55,27 +55,30 @@ export async function calculateStandings() {
 export async function getDisciplineRows(includeZero = false) {
   const [players, completedMatches, events, overrides] = await Promise.all([
     PlayerModel.find().populate('teamId', 'name initials active logoUrl').sort({ name: 1 }).lean(),
-    MatchModel.find({ status: 'completed', confirmedAt: { $exists: true } }).select('_id').lean(),
+    MatchModel.find({ status: 'completed', confirmedAt: { $exists: true } }).select('_id confirmedAt').lean(),
     MatchEventModel.find({ type: { $in: ['yellow_card', 'red_card'] } }).sort({ createdAt: 1 }).lean(),
     DisciplineOverrideModel.find().lean(),
   ])
-  const confirmedIds = new Set(completedMatches.map(match => String(match._id)))
+  const confirmed = new Map(completedMatches.map(match => [String(match._id), match.confirmedAt]))
+  const adjusted = new Map(overrides.map(row => [String(row.playerId), row]))
   const totals = new Map<string, { yellow: number; red: number }>()
   for (const event of events) {
-    if (!confirmedIds.has(String(event.matchId))) continue
+    const confirmedAt = confirmed.get(String(event.matchId))
+    if (!confirmedAt) continue
+    const override = adjusted.get(String(event.playerId))
+    if (override?.updatedAt && new Date(confirmedAt) <= new Date(override.updatedAt)) continue
     const key = String(event.playerId)
     const count = totals.get(key) ?? { yellow: 0, red: 0 }
     if (event.type === 'yellow_card') count.yellow++
     if (event.type === 'red_card') count.red++
     totals.set(key, count)
   }
-  const adjusted = new Map(overrides.map(row => [String(row.playerId), row]))
   const rows = players.map((player: any) => {
     const key = String(player._id)
     const computed = totals.get(key) ?? { yellow: 0, red: 0 }
     const override = adjusted.get(key)
-    const yellow = override ? override.yellowCards : computed.yellow
-    const red = override ? override.redCards : computed.red
+    const yellow = override ? override.yellowCards + computed.yellow : computed.yellow
+    const red = override ? override.redCards + computed.red : computed.red
     const team = player.teamId && typeof player.teamId === 'object' ? {
       id: String(player.teamId._id),
       name: player.teamId.name,
