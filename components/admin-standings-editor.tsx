@@ -14,11 +14,13 @@ export function AdminStandingsEditor({ data, loading, error, refresh }: { data?:
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
   const [problem, setProblem] = useState('')
-  useEffect(() => { if (data?.draftRows) setRows(data.draftRows.map(row => ({ ...row }))) }, [data?.draftRows])
+  const [dirty, setDirty] = useState(false)
+  useEffect(() => { if (data?.draftRows && !dirty) setRows(data.draftRows.map(row => ({ ...row }))) }, [data?.draftRows, dirty])
   const sorted = [...rows].sort((a,b) => a.position - b.position)
   function update(teamId: string, field: 'position'|'wins'|'draws'|'losses'|'gf'|'ga'|'points', value: number) {
     setRows(current => current.map(row => row.teamId === teamId ? { ...row, [field]: value } : row))
     setMessage('')
+    setDirty(true)
   }
   const payload = sorted.map(row => ({ teamId: row.teamId, position: row.position, played: row.wins + row.draws + row.losses, wins: row.wins, draws: row.draws, losses: row.losses, gf: row.gf, ga: row.ga, points: row.points }))
   async function save(publish: boolean) {
@@ -28,6 +30,7 @@ export function AdminStandingsEditor({ data, loading, error, refresh }: { data?:
       await api.standings.saveDraft(payload)
       if (publish) { await api.standings.publish(); setMessage('Standings published successfully. Viewers will see this table on the public website.') }
       else setMessage('Draft saved. The previously published table remains visible to viewers.')
+      setDirty(false)
       await refresh()
       if (publish) await mutate('public-standings')
     } catch (e) { setProblem(e instanceof Error ? e.message : 'The standings update failed.') }
@@ -44,7 +47,7 @@ export function AdminStandingsEditor({ data, loading, error, refresh }: { data?:
     </section>
     <section className="panel admin-editor-card">
       <header className="admin-editor-heading"><div><span className="eyebrow">MANUAL STANDINGS CONTROL</span><h2>Edit the league table</h2><p>Played is calculated from wins, draws and losses. Adjust the figures, save a draft, then submit to make them public.</p></div>
-        <div className="admin-editor-actions"><button className="button-outline" disabled={busy} onClick={() => setRows(data.calculatedRows.map(row => ({ ...row, teamId: row.team.id })))}><RefreshCw/> Use calculated</button><button className="button-outline" disabled={busy} onClick={() => save(false)}><Save/>{busy ? 'Saving…' : 'Save draft'}</button><button className="button-publish" disabled={busy} onClick={() => save(true)}><Send/>{busy ? 'Submitting…' : 'Submit & publish'}</button></div>
+        <div className="admin-editor-actions"><button className="button-outline" disabled={busy} onClick={() => { setRows(data.calculatedRows.map(row => ({ ...row, teamId: row.team.id }))); setDirty(true) }}><RefreshCw/> Use calculated</button><button className="button-outline" disabled={busy} onClick={() => save(false)}><Save/>{busy ? 'Saving…' : 'Save draft'}</button><button className="button-publish" disabled={busy} onClick={() => save(true)}><Send/>{busy ? 'Submitting…' : 'Submit & publish'}</button></div>
       </header>
       {data.draftUpdatedAt && <p className="admin-draft-meta">Draft saved {new Date(data.draftUpdatedAt).toLocaleString()} by {data.draftUpdatedBy}</p>}
       {problem && <p className="form-error" role="alert">{problem}</p>}{message && <p className="admin-success-message" role="status">{message}</p>}

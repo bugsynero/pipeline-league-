@@ -14,13 +14,17 @@ export function AdminDisciplineEditor({ rows, loading, error, refresh }: { rows:
   const [busy, setBusy] = useState<string | null>(null)
   const [message, setMessage] = useState('')
   const [problem, setProblem] = useState('')
+  const [dirtyIds, setDirtyIds] = useState<Record<string, boolean>>({})
   useEffect(() => {
-    const next: Record<string, Value> = {}
-    rows.forEach(row => { next[row.id] = { yellow: row.yellowCards, red: row.redCards, reason: '' } })
-    setValues(next)
-  }, [rows])
+    setValues(current => {
+      const next = { ...current }
+      rows.forEach(row => { if (!dirtyIds[row.id]) next[row.id] = { yellow: row.yellowCards, red: row.redCards, reason: '' } })
+      return next
+    })
+  }, [rows, dirtyIds])
   function update(id: string, field: keyof Value, value: string) {
     setValues(current => ({ ...current, [id]: { ...(current[id] ?? { yellow: 0, red: 0, reason: '' }), [field]: field === 'reason' ? value : num(value) } }))
+    setDirtyIds(current => ({ ...current, [id]: true }))
   }
   async function save(player: PlayerRow) {
     const value = values[player.id]
@@ -29,6 +33,7 @@ export function AdminDisciplineEditor({ rows, loading, error, refresh }: { rows:
     try {
       await api.discipline.update(player.id,{yellowCards:value.yellow,redCards:value.red,reason:value.reason.trim()})
       setMessage('Discipline corrected for '+player.name+'.')
+      setDirtyIds(current => ({ ...current, [player.id]: false }))
       await refresh(); await mutate('public-discipline')
     } catch (e) { setProblem(e instanceof Error ? e.message : 'Could not save the discipline correction.') }
     finally { setBusy(null) }
@@ -39,6 +44,7 @@ export function AdminDisciplineEditor({ rows, loading, error, refresh }: { rows:
     try {
       await api.discipline.reset(player.id)
       setMessage('Manual correction reset for '+player.name+'.')
+      setDirtyIds(current => ({ ...current, [player.id]: false }))
       await refresh(); await mutate('public-discipline')
     } catch (e) { setProblem(e instanceof Error ? e.message : 'Could not reset this correction.') }
     finally { setBusy(null) }
