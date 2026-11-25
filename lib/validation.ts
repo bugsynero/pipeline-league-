@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 const requiredText = (label: string, max = 120) => z.string().trim().min(1, `${label} is required`).max(max, `${label} must be ${max} characters or fewer`)
 const nonNegativeInt = z.coerce.number().int().min(0, 'Must be zero or greater')
-export const teamSchema = z.object({ name: requiredText('Team name', 60).min(2), initials: requiredText('Initials', 4).max(4), active: z.boolean().default(true) })
+export const teamSchema = z.object({ name: requiredText('Team name', 60).min(2), initials: requiredText('Initials', 4).max(4), active: z.boolean().default(true), logoUrl: z.union([z.url(), z.literal('')]).optional() })
 export const playerSchema = z.object({ name: requiredText('Player name', 80), teamId: requiredText('Team'), number: z.coerce.number().int().min(1).max(99), photoUrl: z.union([z.url(), z.literal('')]).optional() })
 export const matchSchema = z.object({ homeId: requiredText('Home team'), awayId: requiredText('Away team'), date: z.string().date(), time: requiredText('Kick-off time', 40), venue: requiredText('Venue', 120), round: requiredText('Matchday', 80) }).refine(match => match.homeId !== match.awayId, { message: 'Choose two different teams', path: ['awayId'] })
 export const matchEventSchema = z.object({ playerId: requiredText('Player'), type: z.enum(['goal', 'assist', 'yellow_card', 'red_card', 'own_goal']), minute: z.coerce.number().int().min(0).max(150), note: z.string().max(300).optional() })
