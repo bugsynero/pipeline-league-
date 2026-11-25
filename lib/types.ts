@@ -8,7 +8,7 @@ export interface Match { id: string; homeId: string; awayId: string; date: strin
 export interface MatchEvent { id: string; matchId: string; playerId: string; type: MatchEventType; minute: number; note?: string }
 export interface LeagueStanding { source?: 'calculated' | 'manual'; publishedAt?: string; position: number; team: Team; played: number; wins: number; draws: number; losses: number; gf: number; ga: number; gd: number; points: number; form: string[] }
 export interface TopScorer extends Player { goals: number; team: Team }
-export interface DisciplineRecord extends Player { yellowCards: number; redCards: number; team: Team; yellow: number; red: number }
+export interface DisciplineRecord extends Player { yellowCards: number; redCards: number; team: Team; yellow: number; red: number; suspendedForMatchId?: string; suspensionMatch?: { id: string; date: string; time: string; round: string; label: string }; suspensionReason?: string }
 export interface Announcement { id: string; title: string; body: string; date: string; published: boolean; pinned: boolean; category?: 'match_report'|'team_news'|'tournament_update'|'general'; imageUrl?: string; imageAlt?: string; matchId?: string; featured?: boolean }
 export interface AdminUser { id: string; name: string; email: string; role: AdminRole; active: boolean }
 export interface AuditLog { id: string; actor: string; action: string; resource: string; resourceId: string; createdAt: string; metadata?: Record<string, unknown> }
