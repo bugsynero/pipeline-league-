@@ -1,4 +1,4 @@
-import { TeamModel, MatchModel, TournamentSettingsModel, PlayerModel, MatchEventModel, DisciplineOverrideModel } from './models'
+import { TeamModel, MatchModel, TournamentSettingsModel, PlayerModel, MatchEventModel, DisciplineOverrideModel, PlayerTournamentStatsModel } from './models'
 
 const teamOut = (team: any) => ({
   id: String(team._id),
@@ -103,4 +103,55 @@ export async function getDisciplineRows(includeZero = false) {
     }
   })
   return includeZero ? rows : rows.filter(row => row.yellow > 0 || row.red > 0)
+}
+
+export async function getManualPlayerStatistics(includeZero = true) {
+  const [players, records] = await Promise.all([
+    PlayerModel.find().populate('teamId', 'name initials active logoUrl').sort({ name: 1 }).lean(),
+    PlayerTournamentStatsModel.find().lean(),
+  ])
+  const byPlayer = new Map(records.map(record => [String(record.playerId), record]))
+  const suspensionIds = records.map(record => record.suspendedForMatchId).filter(Boolean)
+  const matches = suspensionIds.length
+    ? await MatchModel.find({ _id: { $in: suspensionIds } }).populate('homeId', 'name').populate('awayId', 'name').lean()
+    : []
+  const matchById = new Map(matches.map(match => [String(match._id), match]))
+  const rows = players.map((player: any) => {
+    const record: any = byPlayer.get(String(player._id))
+    const team = player.teamId && typeof player.teamId === 'object'
+      ? { id: String(player.teamId._id), name: player.teamId.name, initials: player.teamId.initials, active: player.teamId.active }
+      : null
+    const suspension = record?.suspendedForMatchId ? matchById.get(String(record.suspendedForMatchId)) : null
+    const suspensionMatch = suspension ? {
+      id: String(suspension._id),
+      date: suspension.date,
+      time: suspension.time,
+      round: suspension.round,
+      label: (suspension.homeId?.name ?? 'Home') + ' vs ' + (suspension.awayId?.name ?? 'Away'),
+    } : undefined
+    const row = {
+      id: String(player._id),
+      name: player.name,
+      teamId: team?.id ?? String(player.teamId),
+      team,
+      number: player.number,
+      photoUrl: player.photoUrl,
+      goals: record?.goals ?? 0,
+      assists: record?.assists ?? 0,
+      appearances: record?.appearances ?? 0,
+      yellow: record?.yellowCards ?? 0,
+      red: record?.redCards ?? 0,
+      yellowCards: record?.yellowCards ?? 0,
+      redCards: record?.redCards ?? 0,
+      suspendedForMatchId: record?.suspendedForMatchId ? String(record.suspendedForMatchId) : '',
+      suspensionMatch,
+      suspensionReason: record?.reason ?? '',
+      manuallyAdjusted: Boolean(record),
+      reason: record?.reason,
+      updatedBy: record?.updatedBy,
+      updatedAt: record?.updatedAt,
+    }
+    return row
+  })
+  return includeZero ? rows : rows.filter(row => row.goals > 0 || row.yellowCards > 0 || row.redCards > 0 || Boolean(row.suspensionMatch))
 }
