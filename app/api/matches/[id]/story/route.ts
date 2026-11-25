@@ -19,7 +19,7 @@ export async function PATCH(request: NextRequest, context: Context) {
     if (!isValidObjectId(id)) return NextResponse.json({ code: 'MATCH_NOT_FOUND', message: 'Match not found.' }, { status: 404 })
     const parsed = resultStorySchema.safeParse(await request.json())
     if (!parsed.success) return apiError(parsed.error)
-    if (parsed.data.highlightImageUrl && !/^https?:\\/\\//i.test(parsed.data.highlightImageUrl)) return NextResponse.json({ code: 'INVALID_IMAGE_URL', message: 'Use a publicly accessible http or https image URL.' }, { status: 400 })
+    if (parsed.data.highlightImageUrl && !/^https?:\/\//i.test(parsed.data.highlightImageUrl)) return NextResponse.json({ code: 'INVALID_IMAGE_URL', message: 'Use a publicly accessible http or https image URL.' }, { status: 400 })
     const match = await MatchModel.findById(id)
     if (!match) return NextResponse.json({ code: 'MATCH_NOT_FOUND', message: 'Match not found.' }, { status: 404 })
     const before = { resultHeadline: match.resultHeadline, resultSummary: match.resultSummary, highlightImageUrl: match.highlightImageUrl, featured: match.featured }
