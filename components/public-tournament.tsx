@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import useSWR from 'swr'
-import { ArrowRight, CalendarDays, ChevronLeft, ChevronRight, Clock3, Facebook, Flag, Instagram, Trophy, Youtube } from 'lucide-react'
+import { ArrowRight, CalendarDays, ChevronLeft, ChevronRight, Clock3, Flag, Trophy } from 'lucide-react'
 import { api } from '@/lib/services/api'
 import { tournamentSettings } from '@/lib/tournament-settings'
 import type { Announcement, DisciplineRecord, LeagueStanding, Match, Player, Team, TopScorer, TournamentSettings } from '@/lib/types'
@@ -86,7 +86,7 @@ function Footer() {
     </div>
     <div className="footer-bottom">
       <div className="footer-company-credit"><a href="https://ifybugsydtech.com" target="_blank" rel="noreferrer"><Image src="/ifybugsy-logo.png" alt="Ifybugsy Digital Technologies Limited logo" width={375} height={102}/><span><small>Website designed & developed by</small><b>Ifybugsy Digital Technologies Limited</b><small className="footer-company-link">Visit ifybugsydtech.com <ArrowRight/></small></span></a></div>
-      <div className="footer-social-wrap"><span className="eyebrow">FOLLOW THE TOURNAMENT</span><div className="footer-social" aria-label="Social media channels"><span title="Facebook page link coming soon"><Facebook/></span><span title="Instagram page link coming soon"><Instagram/></span><span title="YouTube channel link coming soon"><Youtube/></span></div><small>Official social links will be added when the pages are confirmed.</small></div>
+      <div className="footer-social-wrap"><span className="eyebrow">FOLLOW THE TOURNAMENT</span><div className="footer-social" aria-label="Social media channels"><span title="Facebook page link coming soon" aria-label="Facebook"><b aria-hidden="true">f</b></span><span title="Instagram page link coming soon" aria-label="Instagram"><b aria-hidden="true">◎</b></span><span title="YouTube channel link coming soon" aria-label="YouTube"><b aria-hidden="true">▶</b></span></div><small>Official social links will be added when the pages are confirmed.</small></div>
       <span className="copyright">© 2026 Pipeline Annual Football Tournament. All rights reserved.</span>
     </div>
   </footer>
