@@ -12,9 +12,9 @@ import { tournamentSettings } from '@/lib/tournament-settings'
 import type { Announcement, DisciplineRecord, LeagueStanding, Match, PlayerPerformance, Team, TopScorer, TournamentSettings } from '@/lib/types'
 
 const footerLinks = [
-  ['Home', '/'], ['About the Tournament', '/about'], ['Participating Teams', '/teams'], ['League Standings', '/standings'], ['Fixtures', '/fixtures'], ['Match Results', '/results'], ['Top Goal Scorers', '/top-scorers'], ['Yellow and Red Cards', '/discipline'], ['Tournament Rules', '/rules'], ['News and Announcements', '/news'], ['Contact Information', '/contact'], ['Privacy Policy', '/privacy'], ['Terms and Conditions', '/terms'], ['Admin Login', '/admin/login'],
+  ['Home', '/'], ['About the Tournament', '/about'], ['Participating Teams', '/teams'], ['League Standings', '/standings'], ['Fixtures', '/fixtures'], ['Match Results', '/results'], ['Goal & Assist Leaders', '/top-scorers'], ['Yellow and Red Cards', '/discipline'], ['Tournament Rules', '/rules'], ['News and Announcements', '/news'], ['Contact Information', '/contact'], ['Privacy Policy', '/privacy'], ['Terms and Conditions', '/terms'], ['Admin Login', '/admin/login'],
 ]
-const navLinks = [['Home', '/'], ['Teams', '/teams'], ['Standings', '/standings'], ['Fixtures', '/fixtures'], ['Results', '/results'], ['Top Scorers', '/top-scorers'], ['Discipline', '/discipline'], ['News', '/news'], ['About', '/about'], ['Contact', '/contact']]
+const navLinks = [['Home', '/'], ['Teams', '/teams'], ['Standings', '/standings'], ['Fixtures', '/fixtures'], ['Results', '/results'], ['Scorers & Assists', '/top-scorers'], ['Discipline', '/discipline'], ['News', '/news'], ['About', '/about'], ['Contact', '/contact']]
 function usePublicData() {
   const [updatedAt, setUpdatedAt] = useState<Record<string, number>>({})
   const refreshed = (key: string) => ({ refreshInterval: key === 'matches' ? 5000 : 10000, revalidateOnFocus: true, onSuccess: () => setUpdatedAt(current => ({ ...current, [key]: Date.now() })) })
