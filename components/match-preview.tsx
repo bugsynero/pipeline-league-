@@ -1,8 +1,10 @@
 'use client'
 
 import Image from 'next/image'
+import useSWR from 'swr'
+import { api } from '@/lib/services/api'
 import { Activity, ArrowRight, CalendarDays, Clock3, Crosshair, Shield, Trophy } from 'lucide-react'
-import type { LeagueStanding, Match, PlayerPerformance, Team } from '@/lib/types'
+import type { LeagueStanding, Match, MatchEvent, PlayerPerformance, Team } from '@/lib/types'
 
 type FormMark = { result: 'W' | 'D' | 'L'; label: string }
 type TeamProfile = {
@@ -23,7 +25,7 @@ type TeamProfile = {
   assistLeader?: PlayerPerformance
 }
 
-function profileFor(team: Team, standings: LeagueStanding[], matches: Match[], players: PlayerPerformance[]): TeamProfile {
+function profileFor(team: Team, standings: LeagueStanding[], matches: Match[], players: PlayerPerformance[], pointRules: { win: number; draw: number; loss: number }): TeamProfile {
   const row = standings.find(item => item.team.id === team.id)
   const teamMatches = matches
     .filter(match => match.status === 'completed' && match.homeScore != null && match.awayScore != null && (match.homeId === team.id || match.awayId === team.id))
@@ -35,13 +37,15 @@ function profileFor(team: Team, standings: LeagueStanding[], matches: Match[], p
     const result: FormMark['result'] = scored > conceded ? 'W' : scored < conceded ? 'L' : 'D'
     return { result, label: result === 'W' ? 'Win' : result === 'D' ? 'Draw' : 'Loss' }
   })
-  const played = row?.played ?? team.played ?? 0
-  const wins = row?.wins ?? team.wins ?? 0
-  const draws = row?.draws ?? team.draws ?? 0
-  const losses = row?.losses ?? team.losses ?? 0
-  const goalsFor = row?.gf ?? team.gf ?? 0
-  const goalsAgainst = row?.ga ?? team.ga ?? 0
-  const points = row?.points ?? team.points ?? 0
+  // Calculate this team's record directly from its confirmed match history.
+  // Manual standings publication does not override match-centre performance data.
+  const played = teamMatches.length
+  const wins = teamMatches.filter(match => { const home = match.homeId === team.id; return (home ? Number(match.homeScore) : Number(match.awayScore)) > (home ? Number(match.awayScore) : Number(match.homeScore)) }).length
+  const losses = teamMatches.filter(match => { const home = match.homeId === team.id; return (home ? Number(match.homeScore) : Number(match.awayScore)) < (home ? Number(match.awayScore) : Number(match.homeScore)) }).length
+  const draws = played - wins - losses
+  const goalsFor = teamMatches.reduce((total, match) => total + (match.homeId === team.id ? Number(match.homeScore) : Number(match.awayScore)), 0)
+  const goalsAgainst = teamMatches.reduce((total, match) => total + (match.homeId === team.id ? Number(match.awayScore) : Number(match.homeScore)), 0)
+  const points = wins * pointRules.win + draws * pointRules.draw + losses * pointRules.loss
   const goalDifference = goalsFor - goalsAgainst
   const recentFormPoints = form.reduce((total, mark) => total + (mark.result === 'W' ? 3 : mark.result === 'D' ? 1 : 0), 0)
   const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
@@ -125,19 +129,25 @@ function KeyPlayers({ profile }: { profile: TeamProfile }) {
   </section>
 }
 
-export function MatchPreview({ match, teams, standings, matches, players }: {
+export function MatchPreview({ match, teams, standings, matches, players, points }: {
   match: Match
   teams: Team[]
   standings: LeagueStanding[]
   matches: Match[]
   players: PlayerPerformance[]
+  points?: { win: number; draw: number; loss: number }
 }) {
+  const { data: events = [] } = useSWR<MatchEvent[]>(['public-match-events', match.id], () => api.matches.events(match.id), { refreshInterval: 5000, revalidateOnFocus: true })
   const homeTeam = teams.find(team => team.id === match.homeId) ?? standings.find(row => row.team.id === match.homeId)?.team
   const awayTeam = teams.find(team => team.id === match.awayId) ?? standings.find(row => row.team.id === match.awayId)?.team
   if (!homeTeam || !awayTeam) return <section className="panel match-centre-notice">Team information is not available for this fixture yet.</section>
-  const home = profileFor(homeTeam, standings, matches, players)
-  const away = profileFor(awayTeam, standings, matches, players)
+  const pointRules = points ?? { win: 3, draw: 1, loss: 0 }
+  const home = profileFor(homeTeam, standings, matches, players, pointRules)
+  const away = profileFor(awayTeam, standings, matches, players, pointRules)
   const completed = match.status === 'completed' && match.homeScore != null && match.awayScore != null
+  const live = match.status === 'live'
+  const report = match.matchReport
+  const hasReport = Boolean(match.resultHeadline || match.resultSummary || match.highlightImageUrl || (report && Object.values(report).some(value => typeof value === 'string' && value.trim().length > 0)))
   const date = new Date(match.date + 'T00:00:00')
   const dateLabel = Number.isNaN(date.getTime()) ? match.date : date.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
   return <div className="match-centre">
@@ -146,18 +156,19 @@ export function MatchPreview({ match, teams, standings, matches, players }: {
       <div className="match-centre-identity">
         <div className="match-centre-side"><TeamCrest team={homeTeam} large/><b>{homeTeam.name}</b><small>HOME</small></div>
         <div className="match-centre-score">
-          <span>{completed ? 'FULL TIME' : match.status === 'live' ? 'LIVE MATCH' : 'UPCOMING FIXTURE'}</span>
-          <strong>{completed ? homeTeam && String(match.homeScore) + ' : ' + String(match.awayScore) : 'VS'}</strong>
-          <small>{match.status.toUpperCase()}</small>
+          <span>{completed ? 'FULL TIME' : live ? 'PLAYING NOW' : 'UPCOMING FIXTURE'}</span>
+          <strong>{(completed || live) && match.homeScore != null && match.awayScore != null ? String(match.homeScore) + ' : ' + String(match.awayScore) : 'VS'}</strong>
+          <small>{live ? 'LIVE · ' + (match.matchMinute ?? 0) + "'" : match.status.toUpperCase()}</small>
         </div>
         <div className="match-centre-side"><TeamCrest team={awayTeam} large/><b>{awayTeam.name}</b><small>AWAY</small></div>
       </div>
       <div className="match-centre-meta"><span><CalendarDays/>{dateLabel}</span><span><Clock3/>{match.time}</span><span><Crosshair/>{match.venue}</span></div>
     </section>
-    {match.resultHeadline && <section className="match-centre-result panel"><span className="match-centre-overline">OFFICIAL MATCH REPORT</span><h2>{match.resultHeadline}</h2>{match.resultSummary && <p>{match.resultSummary}</p>}{match.highlightImageUrl && <a href={match.highlightImageUrl} target="_blank" rel="noreferrer">View match photograph <ArrowRight/></a>}</section>}
+    {hasReport && <section className="match-centre-result panel"><span className="match-centre-overline">OFFICIAL MATCH REPORT</span>{match.resultHeadline && <h2>{match.resultHeadline}</h2>}{match.resultSummary && <p>{match.resultSummary}</p>}{match.matchReport && <div className="match-centre-report-grid">{match.matchReport.weather && <div><small>WEATHER</small><b>{match.matchReport.weather}</b></div>}{match.matchReport.pitchCondition && <div><small>PITCH CONDITION</small><b>{match.matchReport.pitchCondition}</b></div>}{match.matchReport.attendance && <div><small>ATTENDANCE</small><b>{match.matchReport.attendance}</b></div>}{match.matchReport.referee && <div><small>REFEREE / OFFICIALS</small><b>{match.matchReport.referee}</b></div>}{match.matchReport.playerOfTheMatch && <div><small>PLAYER OF THE MATCH</small><b>{match.matchReport.playerOfTheMatch}</b></div>}{match.matchReport.incidents && <div className="report-wide"><small>CARDS & MATCH INCIDENTS</small><p>{match.matchReport.incidents}</p></div>}{match.matchReport.notes && <div className="report-wide"><small>ADDITIONAL NOTES</small><p>{match.matchReport.notes}</p></div>}</div>}{match.highlightImageUrl && <a href={match.highlightImageUrl} target="_blank" rel="noreferrer">View match photograph <ArrowRight/></a>}</section>}
+    <section className="match-centre-events panel"><div className="match-centre-section-title"><span className="match-centre-section-icon"><Activity/></span><div><span className="match-centre-overline">MATCH TIMELINE</span><h2>{live ? 'Live match events' : 'Goals & disciplinary record'}</h2></div>{live && <b className="live-match-badge">LIVE</b>}</div>{events.length ? <div className="match-centre-event-list">{events.map(event => <div className="match-centre-event" key={event.id}><strong>{event.minute}'</strong><span>{event.type === 'yellow_card' ? '🟨' : event.type === 'red_card' ? '🟥' : event.type === 'goal' || event.type === 'own_goal' ? '⚽' : '↗'}</span><div><b>{event.type.replaceAll('_',' ').toUpperCase()}</b><small>{event.player?.name ?? 'Player'} · {event.player?.teamName ?? 'Team'}{event.note ? ' · ' + event.note : ''}</small></div></div>)}</div> : <p className="match-centre-no-stats">No match events have been recorded yet.</p>}</section>
     <div className="match-centre-teams-grid"><TeamPanel profile={home} side="home"/><TeamPanel profile={away} side="away"/></div>
     <Comparison home={home} away={away}/>
     <div className="match-centre-player-grid"><KeyPlayers profile={home}/><KeyPlayers profile={away}/></div>
-    <p className="match-centre-data-note">Performance figures are based on published tournament standings, confirmed match results and player statistics entered by tournament administrators. The performance index is an advisory comparison, not an official governing-body rating.</p>
+    <p className="match-centre-data-note">Team played, win, draw, loss and goal figures are calculated directly from the tournament's confirmed match results. Player goal and assist figures are based on administrator-entered tournament statistics. The performance index is an advisory comparison, not an official governing-body rating.</p>
   </div>
 }

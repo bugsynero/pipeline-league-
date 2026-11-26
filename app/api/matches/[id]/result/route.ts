@@ -35,6 +35,9 @@ export async function POST(request: NextRequest, context: Context) {
     match.homeScore = homeScore
     match.awayScore = awayScore
     match.status = 'completed'
+    match.finishedAt = new Date()
+    match.matchMinute = Number.isInteger(Number(body.matchMinute)) ? Math.min(150, Math.max(0, Number(body.matchMinute))) : (match.matchMinute ?? 90)
+    if (body.matchReport && typeof body.matchReport === 'object') match.matchReport = { ...(match.matchReport?.toObject?.() ?? match.matchReport ?? {}), ...body.matchReport }
     match.confirmedAt = new Date()
     match.confirmedBy = auth.user.id as any
     if (headline) match.resultHeadline = headline
@@ -50,7 +53,7 @@ export async function POST(request: NextRequest, context: Context) {
       id: String(match._id), homeId: String(match.homeId), awayId: String(match.awayId),
       date: match.date, time: match.time, venue: match.venue, round: match.round,
       status: match.status, homeScore, awayScore, resultHeadline: match.resultHeadline,
-      resultSummary: match.resultSummary, highlightImageUrl: match.highlightImageUrl, featured: match.featured,
+      resultSummary: match.resultSummary, highlightImageUrl: match.highlightImageUrl, featured: match.featured, matchMinute: match.matchMinute, matchReport: match.matchReport, finishedAt: match.finishedAt,
       confirmedAt: match.confirmedAt,
     })
   } catch (error) {

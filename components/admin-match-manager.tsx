@@ -96,7 +96,7 @@ export function AdminMatchManager({ rows, teams, players, loading, error, refres
     if (!match) return
     const value = Number(eventMinute)
     if (!playerId || !Number.isInteger(value) || value < 0 || value > 150) { setNotice('Choose a player and enter a valid event minute.'); return }
-    await run(() => api.matches.addEvent(match.id, { playerId, type: eventType, minute: value, note: eventNote.trim() || undefined }), 'Match event added to the live timeline.')
+    await run(async () => { const result = await api.matches.addEvent(match.id, { playerId, type: eventType, minute: value, note: eventNote.trim() || undefined }); if (result.score) { setHomeScore(String(result.score.home)); setAwayScore(String(result.score.away)) } }, 'Match event added to the live timeline.')
     setEventNote('')
   }
   async function saveReport(event: React.FormEvent<HTMLFormElement>) {
