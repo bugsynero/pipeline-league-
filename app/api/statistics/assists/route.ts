@@ -13,7 +13,18 @@ export async function GET() {
     return NextResponse.json(
       rows
         .filter(row => row.assists > 0)
-        .sort((a, b) => b.assists - a.assists || b.goals - a.goals || a.name.localeCompare(b.name)),
+        .sort((a, b) => b.assists - a.assists || b.goals - a.goals || a.name.localeCompare(b.name))
+        .map(row => ({
+          id: row.id,
+          name: row.name,
+          teamId: row.teamId,
+          team: row.team,
+          number: row.number,
+          photoUrl: row.photoUrl,
+          goals: row.goals,
+          assists: row.assists,
+          appearances: row.appearances,
+        })),
     )
   } catch (error) {
     return apiError(error)
