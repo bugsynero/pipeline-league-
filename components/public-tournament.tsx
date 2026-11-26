@@ -9,7 +9,7 @@ import { ArrowRight, CalendarDays, ChevronLeft, ChevronRight, Clock3, Flag, Trop
 import { api } from '@/lib/services/api'
 import { MatchPreview } from '@/components/match-preview'
 import { tournamentSettings } from '@/lib/tournament-settings'
-import type { Announcement, DisciplineRecord, LeagueStanding, Match, Player, Team, TopScorer, TournamentSettings } from '@/lib/types'
+import type { Announcement, DisciplineRecord, LeagueStanding, Match, PlayerPerformance, Team, TopScorer, TournamentSettings } from '@/lib/types'
 
 const footerLinks = [
   ['Home', '/'], ['About the Tournament', '/about'], ['Participating Teams', '/teams'], ['League Standings', '/standings'], ['Fixtures', '/fixtures'], ['Match Results', '/results'], ['Top Goal Scorers', '/top-scorers'], ['Yellow and Red Cards', '/discipline'], ['Tournament Rules', '/rules'], ['News and Announcements', '/news'], ['Contact Information', '/contact'], ['Privacy Policy', '/privacy'], ['Terms and Conditions', '/terms'], ['Admin Login', '/admin/login'],
