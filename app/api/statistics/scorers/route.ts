@@ -10,7 +10,22 @@ export async function GET() {
   try {
     await connectToDatabase()
     const rows = await getManualPlayerStatistics(false)
-    return NextResponse.json(rows.filter(row => row.goals > 0).sort((a, b) => b.goals - a.goals || a.name.localeCompare(b.name)))
+    return NextResponse.json(
+      rows
+        .filter(row => row.goals > 0)
+        .sort((a, b) => b.goals - a.goals || b.assists - a.assists || a.name.localeCompare(b.name))
+        .map(row => ({
+          id: row.id,
+          name: row.name,
+          teamId: row.teamId,
+          team: row.team,
+          number: row.number,
+          photoUrl: row.photoUrl,
+          goals: row.goals,
+          assists: row.assists,
+          appearances: row.appearances,
+        })),
+    )
   } catch (error) {
     return apiError(error)
   }
