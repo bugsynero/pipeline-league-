@@ -1,7 +1,7 @@
 'use client'
 
 import Image from 'next/image'
-import { Activity, ArrowRight, CalendarDays, Clock3, Crosshair, Shield, Swords, Trophy } from 'lucide-react'
+import { Activity, ArrowRight, CalendarDays, Clock3, Crosshair, Shield, Trophy } from 'lucide-react'
 import type { LeagueStanding, Match, PlayerPerformance, Team } from '@/lib/types'
 
 type FormMark = { result: 'W' | 'D' | 'L'; label: string }
@@ -45,8 +45,9 @@ function profileFor(team: Team, standings: LeagueStanding[], matches: Match[], p
   const recentFormPoints = form.reduce((total, mark) => total + (mark.result === 'W' ? 3 : mark.result === 'D' ? 1 : 0), 0)
   const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
   // Transparent advisory index: league points per game (45%), last-five form (35%), and goal difference per game (20%).
+  const recentFormRatio = form.length ? recentFormPoints / (form.length * 3) : 0
   const index = played > 0
-    ? Math.round(clamp(points / (played * 3), 0, 1) * 45 + (recentFormPoints / 15) * 35 + ((clamp(goalDifference / played, -1, 1) + 1) / 2) * 20)
+    ? Math.round(clamp(points / (played * 3), 0, 1) * 45 + recentFormRatio * 35 + ((clamp(goalDifference / played, -1, 1) + 1) / 2) * 20)
     : null
   const teamPlayers = players.filter(player => player.teamId === team.id).sort((a, b) =>
     (b.goals + b.assists) - (a.goals + a.assists) || b.goals - a.goals || b.assists - a.assists || a.name.localeCompare(b.name),
@@ -86,8 +87,8 @@ function TeamPanel({ profile, side }: { profile: TeamProfile; side: 'home' | 'aw
 }
 
 function Comparison({ home, away }: { home: TeamProfile; away: TeamProfile }) {
-  const rows: { label: string; home: number; away: number; higherBetter?: boolean }[] = [
-    { label: 'Matches played', home: home.played, away: away.played, higherBetter: false },
+  const rows: { label: string; home: number; away: number; neutral?: boolean }[] = [
+    { label: 'Matches played', home: home.played, away: away.played, neutral: true },
     { label: 'Wins', home: home.wins, away: away.wins },
     { label: 'Goals scored', home: home.goalsFor, away: away.goalsFor },
     { label: 'Goal difference', home: home.goalDifference, away: away.goalDifference },
@@ -96,8 +97,8 @@ function Comparison({ home, away }: { home: TeamProfile; away: TeamProfile }) {
   return <section className="match-centre-comparison panel">
     <div className="match-centre-section-title"><span className="match-centre-section-icon"><Activity/></span><div><span className="match-centre-overline">HEAD-TO-HEAD</span><h2>Team comparison</h2></div></div>
     {rows.map(row => {
-      const homeWins = row.home > row.away
-      const awayWins = row.away > row.home
+      const homeWins = !row.neutral && row.home > row.away
+      const awayWins = !row.neutral && row.away > row.home
       const max = Math.max(Math.abs(row.home), Math.abs(row.away), 1)
       const homeWidth = Math.max(row.home === 0 ? 0 : 4, Math.min(100, Math.abs(row.home) / max * 100))
       const awayWidth = Math.max(row.away === 0 ? 0 : 4, Math.min(100, Math.abs(row.away) / max * 100))
