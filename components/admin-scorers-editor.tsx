@@ -29,6 +29,9 @@ export function AdminScorersEditor({ rows, loading, error, refresh }: { rows: Sc
   function addGoal(player: ScorerRow) {
     update(player.id, 'goals', String(Math.min(999, (values[player.id]?.goals ?? player.goals) + 1)))
   }
+  function addAssist(player: ScorerRow) {
+    update(player.id, 'assists', String(Math.min(999, (values[player.id]?.assists ?? player.assists) + 1)))
+  }
   async function save(player: ScorerRow) {
     const value = values[player.id] ?? { goals: player.goals, assists: player.assists, appearances: player.appearances, reason: '' }
     setBusy(player.id); setProblem(''); setMessage('')
@@ -47,7 +50,7 @@ export function AdminScorersEditor({ rows, loading, error, refresh }: { rows: Sc
   if (loading) return <div className="empty-state">Loading registered players…</div>
   if (error) return <div className="empty-state" role="alert">Could not load scorer records. <button onClick={() => refresh()}>Retry</button></div>
   return <section className="panel admin-editor-card">
-    <header className="admin-editor-heading"><div><span className="eyebrow">GOLDEN BOOT MANAGEMENT</span><h2>Manually publish player scoring records</h2><p>Register the player first under Players, then set their official goals, assists and appearances here. These admin-saved figures alone control the public Golden Boot ranking. Use +1 goal to record a goal quickly, then save the player’s statistics.</p></div></header>
+    <header className="admin-editor-heading"><div><span className="eyebrow">GOLDEN BOOT MANAGEMENT</span><h2>Manually publish player scoring records</h2><p>Register the player first under Players, then set their official goals, assists and appearances here. These admin-saved figures alone control the public Golden Boot ranking. Use +1 beside goals or assists to record each contribution quickly, then save the player’s statistics.</p></div></header>
     {problem && <p className="form-error" role="alert">{problem}</p>}
     {message && <p className="admin-success-message" role="status">{message}</p>}
     <div className="table-wrap"><table className="standings-table admin-edit-table"><thead><tr><th>PLAYER</th><th>TEAM</th><th>APPEARANCES</th><th>GOALS</th><th>ASSISTS</th><th>ADMIN NOTE</th><th>ACTION</th></tr></thead><tbody>
@@ -56,7 +59,7 @@ export function AdminScorersEditor({ rows, loading, error, refresh }: { rows: Sc
         <td>{player.team?.name ?? '—'}</td>
         <td><input aria-label={'Appearances for ' + player.name} type="number" min="0" max="999" value={values[player.id]?.appearances ?? player.appearances} onChange={e => update(player.id, 'appearances', e.target.value)} /></td>
         <td><div className="admin-stat-control"><input aria-label={'Goals for ' + player.name} type="number" min="0" max="999" value={values[player.id]?.goals ?? player.goals} onChange={e => update(player.id, 'goals', e.target.value)} /><button type="button" className="button-outline admin-quick-increment" aria-label={'Add one goal for ' + player.name} onClick={() => addGoal(player)}>+1</button></div></td>
-        <td><input aria-label={'Assists for ' + player.name} type="number" min="0" max="999" value={values[player.id]?.assists ?? player.assists} onChange={e => update(player.id, 'assists', e.target.value)} /></td>
+        <td><div className="admin-stat-control"><input aria-label={'Assists for ' + player.name} type="number" min="0" max="999" value={values[player.id]?.assists ?? player.assists} onChange={e => update(player.id, 'assists', e.target.value)} /><button type="button" className="button-outline admin-quick-increment" aria-label={'Add one assist for ' + player.name} onClick={() => addAssist(player)}>+1</button></div></td>
         <td><input aria-label={'Admin note for ' + player.name} value={values[player.id]?.reason ?? ''} placeholder="Optional note for audit" onChange={e => update(player.id, 'reason', e.target.value)} /></td>
         <td><button className="button-primary" disabled={busy !== null} onClick={() => save(player)}><Save />{busy === player.id ? 'Saving…' : 'Save stats'}</button></td>
       </tr>)}
