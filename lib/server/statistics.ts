@@ -170,5 +170,5 @@ export async function getManualPlayerStatistics(includeZero = true) {
     }
     return row
   })
-  return includeZero ? rows : rows.filter(row => row.goals > 0 || row.yellowCards > 0 || row.redCards > 0 || Boolean(row.suspensionMatch))
+  return includeZero ? rows : rows.filter(row => row.goals > 0 || row.assists > 0 || row.yellowCards > 0 || row.redCards > 0 || Boolean(row.suspensionMatch))
 }
