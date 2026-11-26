@@ -8,6 +8,31 @@ const teamOut = (team: any) => ({
   ...(team.logoUrl ? { logoUrl: team.logoUrl } : {}),
 })
 
+export function rankManualStandingRows(
+  rows: any[],
+  pointRules: { win: number; draw: number; loss: number } = { win: 3, draw: 1, loss: 0 },
+  tieBreakers: string[] = ['points', 'goalDifference', 'goalsFor'],
+) {
+  const keys = ['points', ...tieBreakers.filter(key => key !== 'points' && ['goalDifference', 'goalsFor'].includes(key))]
+  const ranked = rows.map(row => ({
+    ...row,
+    played: Number(row.wins) + Number(row.draws) + Number(row.losses),
+    points: Number(row.wins) * pointRules.win + Number(row.draws) * pointRules.draw + Number(row.losses) * pointRules.loss,
+    gd: Number(row.gf) - Number(row.ga),
+  }))
+  ranked.sort((a, b) => {
+    for (const key of keys) {
+      const left = key === 'points' ? a.points : key === 'goalDifference' ? a.gd : a.gf
+      const right = key === 'points' ? b.points : key === 'goalDifference' ? b.gd : b.gf
+      if (left !== right) return right - left
+    }
+    const leftName = a.team?.name ?? a.teamId?.name ?? a.teamName ?? String(a.teamId ?? '')
+    const rightName = b.team?.name ?? b.teamId?.name ?? b.teamName ?? String(b.teamId ?? '')
+    return String(leftName).localeCompare(String(rightName))
+  })
+  return ranked.map((row, index) => ({ ...row, position: index + 1 }))
+}
+
 export async function calculateStandings() {
   const [teams, matches, settings] = await Promise.all([
     TeamModel.find({ active: true }).sort({ name: 1 }).lean(),
@@ -41,15 +66,7 @@ export async function calculateStandings() {
   })
   const tieBreakers = (settings?.tieBreakers ?? ['points', 'goalDifference', 'goalsFor'])
     .filter((key: string) => ['points', 'goalDifference', 'goalsFor'].includes(key))
-  rows.sort((left: any, right: any) => {
-    for (const key of tieBreakers) {
-      const a = key === 'points' ? left.points : key === 'goalDifference' ? left.gd : left.gf
-      const b = key === 'points' ? right.points : key === 'goalDifference' ? right.gd : right.gf
-      if (a !== b) return b - a
-    }
-    return left.team.name.localeCompare(right.team.name)
-  })
-  return rows.map((row: any, index: number) => ({ position: index + 1, ...row, source: 'calculated' as const }))
+  return rankManualStandingRows(rows, points, tieBreakers).map((row: any) => ({ ...row, source: 'calculated' as const }))
 }
 
 export async function getDisciplineRows(includeZero = false) {

@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { isValidObjectId } from 'mongoose'
 import { connectToDatabase } from '@/lib/server/db'
 import { requireAdmin, canManage } from '@/lib/server/authorization'
-import { TeamModel, StandingsPublicationModel, AuditLogModel } from '@/lib/server/models'
-import { calculateStandings } from '@/lib/server/statistics'
+import { TeamModel, StandingsPublicationModel, TournamentSettingsModel, AuditLogModel } from '@/lib/server/models'
+import { calculateStandings, rankManualStandingRows } from '@/lib/server/statistics'
 import { standingsDraftSchema } from '@/lib/validation'
 import { apiError } from '@/lib/server/http'
 
@@ -32,14 +32,25 @@ export async function GET(request: NextRequest) {
     await connectToDatabase()
     const gate = await guard(request)
     if (gate.response) return gate.response
-    const [calculatedRows, publication] = await Promise.all([
+    const [calculatedRows, publication, settings] = await Promise.all([
       calculateStandings(),
       StandingsPublicationModel.findOne({ key: 'current' }).populate('draftRows.teamId').populate('publishedRows.teamId').lean(),
+      TournamentSettingsModel.findOne({ key: 'tournament' }).lean(),
     ])
+    const pointsConfig = settings?.points ?? { win: 3, draw: 1, loss: 0 }
+    const tieBreakers = (settings?.tieBreakers ?? ['points', 'goalDifference', 'goalsFor']).filter((key: string) => ['points', 'goalDifference', 'goalsFor'].includes(key))
+    const draftRows = publication?.draftRows?.length
+      ? rankManualStandingRows(publication.draftRows, pointsConfig, tieBreakers).map(rowOut)
+      : calculatedRows.map(row => ({ ...row, teamId: row.team.id }))
+    const publishedRows = publication?.publishedRows?.length
+      ? rankManualStandingRows(publication.publishedRows, pointsConfig, tieBreakers).map(rowOut)
+      : []
     return NextResponse.json({
       calculatedRows,
-      draftRows: publication?.draftRows?.length ? publication.draftRows.map(rowOut) : calculatedRows.map(row => ({ ...row, teamId: row.team.id })),
-      publishedRows: publication?.publishedRows?.map(rowOut) ?? [],
+      draftRows,
+      publishedRows,
+      pointsConfig,
+      tieBreakers,
       publishedAt: publication?.publishedAt ?? null,
       publishedBy: publication?.publishedBy ?? null,
       draftUpdatedAt: publication?.draftUpdatedAt ?? null,
@@ -66,15 +77,29 @@ export async function POST(request: NextRequest) {
     if (rows.some(row => row.played !== row.wins + row.draws + row.losses)) {
       return NextResponse.json({ code: 'INVALID_STANDINGS', message: 'Played must equal wins plus draws plus losses for every team.' }, { status: 400 })
     }
-    if (new Set(rows.map(row => row.position)).size !== rows.length) {
-      return NextResponse.json({ code: 'INVALID_STANDINGS', message: 'Each team must have a unique table position.' }, { status: 400 })
-    }
-    const activeTeams = await TeamModel.find({ active: true }).select('_id').lean()
+    const [activeTeams, settings] = await Promise.all([
+      TeamModel.find({ active: true }).select('_id name').lean(),
+      TournamentSettingsModel.findOne({ key: 'tournament' }).lean(),
+    ])
     const allowed = new Set(activeTeams.map(team => String(team._id)))
     if (ids.length !== activeTeams.length || ids.some(id => !allowed.has(id))) {
       return NextResponse.json({ code: 'INCOMPLETE_STANDINGS', message: 'Include every active participating team exactly once before saving the table.' }, { status: 400 })
     }
-    const normalized = [...rows].sort((a, b) => a.position - b.position)
+    const pointsConfig = settings?.points ?? { win: 3, draw: 1, loss: 0 }
+    const tieBreakers = (settings?.tieBreakers ?? ['points', 'goalDifference', 'goalsFor']).filter((key: string) => ['points', 'goalDifference', 'goalsFor'].includes(key))
+    const teamNames = new Map(activeTeams.map(team => [String(team._id), team.name]))
+    const ranked = rankManualStandingRows(rows.map(row => ({ ...row, teamName: teamNames.get(row.teamId) ?? row.teamId })), pointsConfig, tieBreakers)
+    const normalized = ranked.map(row => ({
+      teamId: row.teamId,
+      position: row.position,
+      played: row.played,
+      wins: row.wins,
+      draws: row.draws,
+      losses: row.losses,
+      gf: row.gf,
+      ga: row.ga,
+      points: row.points,
+    }))
     const saved = await StandingsPublicationModel.findOneAndUpdate(
       { key: 'current' },
       { $set: { draftRows: normalized, draftUpdatedAt: new Date(), draftUpdatedBy: gate.user.email } },

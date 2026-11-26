@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { connectToDatabase } from '@/lib/server/db'
-import { StandingsPublicationModel } from '@/lib/server/models'
-import { calculateStandings } from '@/lib/server/statistics'
+import { StandingsPublicationModel, TournamentSettingsModel } from '@/lib/server/models'
+import { calculateStandings, rankManualStandingRows } from '@/lib/server/statistics'
 import { apiError } from '@/lib/server/http'
 
 export const runtime = 'nodejs'
@@ -21,9 +21,15 @@ function manualRow(row: any, publishedAt: Date) {
 export async function GET() {
   try {
     await connectToDatabase()
-    const publication = await StandingsPublicationModel.findOne({ key: 'current' }).populate('publishedRows.teamId').lean()
+    const [publication, settings] = await Promise.all([
+      StandingsPublicationModel.findOne({ key: 'current' }).populate('publishedRows.teamId').lean(),
+      TournamentSettingsModel.findOne({ key: 'tournament' }).lean(),
+    ])
     if (publication?.publishedAt && publication.publishedRows?.length) {
-      return NextResponse.json(publication.publishedRows.map((row: any) => manualRow(row, publication.publishedAt!)))
+      const pointRules = settings?.points ?? { win: 3, draw: 1, loss: 0 }
+      const tieBreakers = (settings?.tieBreakers ?? ['points', 'goalDifference', 'goalsFor']).filter((key: string) => ['points', 'goalDifference', 'goalsFor'].includes(key))
+      const rankedRows = rankManualStandingRows(publication.publishedRows, pointRules, tieBreakers)
+      return NextResponse.json(rankedRows.map((row: any) => manualRow(row, publication.publishedAt!)))
     }
     return NextResponse.json(await calculateStandings())
   } catch (error) {
