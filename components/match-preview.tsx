@@ -7,6 +7,7 @@ import type { LeagueStanding, Match, PlayerPerformance, Team } from '@/lib/types
 type FormMark = { result: 'W' | 'D' | 'L'; label: string }
 type TeamProfile = {
   team: Team
+  position: number | null
   played: number
   wins: number
   draws: number
@@ -54,7 +55,7 @@ function profileFor(team: Team, standings: LeagueStanding[], matches: Match[], p
   )
   const topScorer = [...teamPlayers].filter(player => player.goals > 0).sort((a, b) => b.goals - a.goals || b.assists - a.assists)[0]
   const assistLeader = [...teamPlayers].filter(player => player.assists > 0).sort((a, b) => b.assists - a.assists || b.goals - a.goals)[0]
-  return { team, played, wins, draws, losses, goalsFor, goalsAgainst, goalDifference, points, form, index, players: teamPlayers, topScorer, assistLeader }
+  return { team, position: row?.position ?? null, played, wins, draws, losses, goalsFor, goalsAgainst, goalDifference, points, form, index, players: teamPlayers, topScorer, assistLeader }
 }
 
 function TeamCrest({ team, large = false }: { team: Team; large?: boolean }) {
@@ -79,7 +80,7 @@ function PlayerMini({ player, role }: { player?: PlayerPerformance; role: string
 function TeamPanel({ profile, side }: { profile: TeamProfile; side: 'home' | 'away' }) {
   const { team } = profile
   return <section className={'match-centre-team-panel ' + side}>
-    <div className="match-centre-team-head"><TeamCrest team={team} large/><div><span className="match-centre-overline">{side === 'home' ? 'HOME TEAM' : 'AWAY TEAM'}</span><h2>{team.name}</h2><small>{profile.played} league matches played</small></div></div>
+    <div className="match-centre-team-head"><TeamCrest team={team} large/><div><span className="match-centre-overline">{side === 'home' ? 'HOME TEAM' : 'AWAY TEAM'}</span><h2>{team.name}</h2><small>{profile.position ? 'League position #' + profile.position + ' · ' : ''}{profile.played} league matches played</small></div></div>
     <div className="match-centre-strength"><div><span>TOURNAMENT PERFORMANCE INDEX</span><b>{profile.index == null ? '—' : profile.index + '/100'}</b></div><div className="match-centre-meter"><span style={{ width: (profile.index ?? 0) + '%' }}/></div><small>{profile.index == null ? 'Not enough confirmed matches to calculate a rating.' : 'Advisory index from league points, last-five form and goal difference.'}</small></div>
     <div className="match-centre-form"><span>LAST FIVE</span><div>{profile.form.length ? profile.form.map((mark, index) => <span key={index} className={'form-mark form-' + mark.result.toLowerCase()} title={mark.label}>{mark.result}</span>) : <small>No confirmed results yet</small>}</div></div>
     <div className="match-centre-record"><div><strong>{profile.wins}</strong><span>WINS</span></div><div><strong>{profile.draws}</strong><span>DRAWS</span></div><div><strong>{profile.losses}</strong><span>LOSSES</span></div><div><strong>{profile.points}</strong><span>POINTS</span></div></div>
@@ -87,18 +88,19 @@ function TeamPanel({ profile, side }: { profile: TeamProfile; side: 'home' | 'aw
 }
 
 function Comparison({ home, away }: { home: TeamProfile; away: TeamProfile }) {
-  const rows: { label: string; home: number; away: number; neutral?: boolean }[] = [
+  const rows: { label: string; home: number; away: number; neutral?: boolean; lowerBetter?: boolean }[] = [
     { label: 'Matches played', home: home.played, away: away.played, neutral: true },
     { label: 'Wins', home: home.wins, away: away.wins },
     { label: 'Goals scored', home: home.goalsFor, away: away.goalsFor },
+    { label: 'Goals conceded', home: home.goalsAgainst, away: away.goalsAgainst, lowerBetter: true },
     { label: 'Goal difference', home: home.goalDifference, away: away.goalDifference },
     { label: 'League points', home: home.points, away: away.points },
   ]
   return <section className="match-centre-comparison panel">
     <div className="match-centre-section-title"><span className="match-centre-section-icon"><Activity/></span><div><span className="match-centre-overline">HEAD-TO-HEAD</span><h2>Team comparison</h2></div></div>
     {rows.map(row => {
-      const homeWins = !row.neutral && row.home > row.away
-      const awayWins = !row.neutral && row.away > row.home
+      const homeWins = !row.neutral && (row.lowerBetter ? row.home < row.away : row.home > row.away)
+      const awayWins = !row.neutral && (row.lowerBetter ? row.away < row.home : row.away > row.home)
       const max = Math.max(Math.abs(row.home), Math.abs(row.away), 1)
       const homeWidth = Math.max(row.home === 0 ? 0 : 4, Math.min(100, Math.abs(row.home) / max * 100))
       const awayWidth = Math.max(row.away === 0 ? 0 : 4, Math.min(100, Math.abs(row.away) / max * 100))
