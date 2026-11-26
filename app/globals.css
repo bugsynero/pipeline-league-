@@ -431,3 +431,34 @@
 .match-centre-event small{font-size:9px;color:#82877f}
 @media(max-width:900px){.admin-live-match-layout{grid-template-columns:1fr}.admin-live-match-list{max-height:340px}.admin-match-event-form{grid-template-columns:1fr 1fr}.admin-match-event-form button{grid-column:1/-1}}
 @media(max-width:720px){.admin-live-match-list{padding:12px}.admin-live-scoreboard,.admin-match-manager-form{padding:14px}.admin-live-score-teams{gap:6px;padding:19px 0}.admin-live-score-value>strong{font-size:27px}.admin-live-score-teams>div>b{font-size:13px}.admin-match-score-fields{grid-template-columns:1fr 1fr}.admin-match-score-fields label:last-child{grid-column:1/-1}.admin-match-report-grid,.match-centre-report-grid{grid-template-columns:1fr}.admin-match-event-form{grid-template-columns:1fr 1fr}.admin-match-event-form label:last-of-type{grid-column:1/-1}.admin-match-finish-row{align-items:stretch;flex-direction:column}.admin-match-finish-row button{width:100%}.match-history-filters{grid-template-columns:1fr 1fr}.match-history-filters label:last-of-type{grid-column:1/-1}.match-history-summary{flex-direction:column}.match-history-home-links{flex-wrap:wrap}.match-history-day-heading h2{font-size:15px}}
+
+
+/* Immersive homepage football hero slideshow */
+.hero{isolation:isolate;background:#241019}
+.hero-slideshow{position:absolute;inset:0;z-index:0;overflow:hidden}
+.hero-slide-images{position:absolute;inset:0}
+.hero-slide{position:absolute;inset:0;background-size:cover;background-position:center 42%;opacity:0;transform:scale(1.055);transition:opacity 1.15s ease,transform 8s linear;will-change:opacity,transform}
+.hero-slide.is-active{opacity:1;transform:scale(1)}
+.hero:after{z-index:1;background:linear-gradient(90deg,rgba(28,11,18,.94) 0%,rgba(43,15,25,.82) 43%,rgba(45,15,24,.58) 100%),linear-gradient(0deg,rgba(18,9,13,.42),transparent 58%);pointer-events:none}
+.hero-content,.hero-aside{z-index:2}
+.hero-slider-controls{position:absolute;z-index:3;right:max(calc((100vw - 1240px)/2),32px);bottom:24px;display:flex;align-items:center;gap:12px;padding:7px 9px;border:1px solid rgba(255,255,255,.2);border-radius:7px;background:rgba(22,12,17,.38);backdrop-filter:blur(12px)}
+.hero-slide-counter{display:flex;align-items:center;gap:5px;color:#d2c9c0;font-size:9px;letter-spacing:.12em}
+.hero-slide-counter strong{color:#e4b96f;font-size:11px}
+.hero-slide-counter span{color:#81756e}
+.hero-slide-dots{display:flex;align-items:center;gap:5px;padding:0 3px}
+.hero-slide-dots button{width:7px;height:7px;padding:0;border:0;border-radius:50%;background:rgba(255,255,255,.42);transition:width .25s ease,background .25s ease}
+.hero-slide-dots button.is-active{width:23px;border-radius:8px;background:#dfb66e}
+.hero-slider-arrow{width:29px;height:29px;display:grid;place-items:center;padding:0;border:1px solid rgba(255,255,255,.25);border-radius:50%;background:rgba(255,255,255,.08);color:#fff;transition:background .2s,border-color .2s}
+.hero-slider-arrow:hover{background:rgba(223,182,110,.2);border-color:#dfb66e}
+.hero-slider-arrow svg{width:15px;height:15px}
+@media(max-width:720px){
+  .hero-slide{background-position:center}
+  .hero:after{background:linear-gradient(90deg,rgba(28,11,18,.91),rgba(43,15,25,.70)),linear-gradient(0deg,rgba(18,9,13,.47),transparent 65%)}
+  .hero-slider-controls{right:18px;bottom:16px;gap:8px;padding:6px 7px}
+  .hero-slide-counter{font-size:8px}
+  .hero-slider-arrow{width:27px;height:27px}
+}
+@media(prefers-reduced-motion:reduce){
+  .hero-slide,.hero-slide-dots button,.hero-slider-arrow{transition:none}
+  .hero-slide{transform:none}
+}

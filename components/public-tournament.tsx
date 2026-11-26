@@ -203,6 +203,73 @@ function NewsSpotlight({ list }: { list: Announcement[] }) {
   </section>
 }
 
+const heroSlides = [
+  {
+    name: 'Stadium under the lights',
+    image: 'https://images.unsplash.com/photo-1781152791898-945ca008c8ef?auto=format&fit=crop&w=2400&q=85',
+  },
+  {
+    name: 'Football crowd and match atmosphere',
+    image: 'https://images.unsplash.com/photo-1780766382589-5e517d4f0b81?auto=format&fit=crop&w=2400&q=85',
+  },
+  {
+    name: 'Packed stadium on match night',
+    image: 'https://images.unsplash.com/photo-1767916732786-a83902ffc25c?auto=format&fit=crop&w=2400&q=85',
+  },
+]
+
+function HeroSlideshow() {
+  const [activeSlide, setActiveSlide] = useState(0)
+  const [paused, setPaused] = useState(false)
+
+  useEffect(() => {
+    if (paused || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    const timer = window.setInterval(() => {
+      setActiveSlide(current => (current + 1) % heroSlides.length)
+    }, 7200)
+    return () => window.clearInterval(timer)
+  }, [paused])
+
+  const move = (direction: number) => {
+    setActiveSlide(current => (current + direction + heroSlides.length) % heroSlides.length)
+  }
+
+  return <div
+    className="hero-slideshow"
+    role="group"
+    aria-label="Football stadium slideshow"
+    onMouseEnter={() => setPaused(true)}
+    onMouseLeave={() => setPaused(false)}
+  >
+    <div className="hero-slide-images" aria-hidden="true">
+      {heroSlides.map((slide, index) => <div
+        key={slide.name}
+        className={'hero-slide' + (activeSlide === index ? ' is-active' : '')}
+        style={{ backgroundImage: 'url("' + slide.image + '")' }}
+      />)}
+    </div>
+    <div className="hero-slider-controls">
+      <span className="hero-slide-counter" aria-live="off">
+        <strong>{String(activeSlide + 1).padStart(2, '0')}</strong>
+        <span>/</span>
+        {String(heroSlides.length).padStart(2, '0')}
+      </span>
+      <div className="hero-slide-dots">
+        {heroSlides.map((slide, index) => <button
+          type="button"
+          key={slide.name}
+          aria-label={'Show slide ' + (index + 1) + ': ' + slide.name}
+          aria-pressed={activeSlide === index}
+          className={activeSlide === index ? 'is-active' : ''}
+          onClick={() => setActiveSlide(index)}
+        />)}
+      </div>
+      <button type="button" className="hero-slider-arrow" aria-label="Previous football slide" onClick={() => move(-1)}><ChevronLeft/></button>
+      <button type="button" className="hero-slider-arrow" aria-label="Next football slide" onClick={() => move(1)}><ChevronRight/></button>
+    </div>
+  </div>
+}
+
 function Landing() {
   const data = usePublicData()
   const teams = data.teams.data ?? []
@@ -212,7 +279,7 @@ function Landing() {
   const results = matches.filter(match => match.status === 'completed' && match.homeScore != null && match.awayScore != null)
   const announcements = (data.announcements.data ?? []).filter(item => item.published)
   const featuredResults = [...results].sort((a,b) => Number(Boolean(b.featured)) - Number(Boolean(a.featured)) || b.date.localeCompare(a.date)).slice(0, 3)
-  return <Shell><section className="hero"><div className="hero-content"><div className="hero-kicker"><span className="live-dot"/> OFFICIAL TOURNAMENT INFORMATION</div><h1>Football brings<br/><em>us together.</em></h1><p>{data.settings.error ? 'Tournament information is unavailable right now.' : data.settings.data?.tournament.name ?? 'Tournament name not published'}</p><div className="hero-info"><span><Flag/>RUKPOKWU, PORT HARCOURT</span><span><CalendarDays/>RIVERS STATE, NIGERIA</span></div><div className="hero-actions"><Link href="/fixtures" className="button-primary">Explore fixtures <ArrowRight/></Link><Link href="/standings" className="button-ghost">View standings</Link></div></div><div className="hero-aside"><div className="tournament-badge"><div className="badge-line">ANNUAL TOURNAMENT</div><Trophy/><strong>2026</strong><span>RUKPOKWU, NIGERIA</span></div></div></section><section className="content-section"><div className="section-title"><div><div className="eyebrow">OFFICIAL UPDATES</div><h2>Tournament at a glance</h2></div><LiveUpdated at={data.updatedAt.teams}/></div><div className="quick-stats"><div><span>ACTIVE TEAMS</span><strong>{data.teams.error ? 'Unavailable' : data.teams.isLoading ? '—' : active.length || '—'}</strong><small>{data.teams.error ? 'Connection error' : active.length ? 'Currently participating' : 'No teams published'}</small></div><div><span>CONFIRMED RESULTS</span><strong>{data.matches.error ? 'Unavailable' : data.matches.isLoading ? '—' : results.length || '—'}</strong><small>{data.matches.error ? 'Connection error' : results.length ? 'Official results' : 'No confirmed results'}</small></div><div><span>UPCOMING FIXTURES</span><strong>{data.matches.error ? 'Unavailable' : data.matches.isLoading ? '—' : fixtures.length || '—'}</strong><small>{data.matches.error ? 'Connection error' : fixtures.length ? 'Published schedule' : 'No upcoming fixtures'}</small></div><div><span>ANNOUNCEMENTS</span><strong>{data.announcements.error ? 'Unavailable' : data.announcements.isLoading ? '—' : announcements.length || '—'}</strong><small>{data.announcements.error ? 'Connection error' : announcements.length ? 'Published updates' : 'No announcements published'}</small></div></div><NewsSpotlight list={announcements}/>{featuredResults.length>0 && <section className="content-section featured-match-section"><div className="section-title"><div><div className="eyebrow">LATEST MATCH RESULTS</div><h2>Matchday highlights</h2></div><div className="match-history-home-links"><Link href="/results">All results <ArrowRight/></Link><Link href="/history">Match history <ArrowRight/></Link></div></div><MatchList list={featuredResults} teams={teams}/></section>}<div className="home-grid"><section className="panel"><div className="section-title"><div><div className="eyebrow">THE TABLE</div><h2>League standings</h2></div><Link href="/standings">Full table <ArrowRight/></Link></div><DataState loading={data.standings.isLoading} error={data.standings.error} empty={!data.standings.isLoading && !(data.standings.data ?? []).length}><Standings list={(data.standings.data ?? []).slice(0, 5)}/></DataState></section><section className="panel"><div className="section-title"><div><div className="eyebrow">NEXT UP</div><h2>Fixtures & live matches</h2></div><Link href="/fixtures">All fixtures <ArrowRight/></Link></div><DataState loading={data.matches.isLoading} error={data.matches.error} empty={!data.matches.isLoading && !fixtures.length}><MatchList list={fixtures.slice(0, 3)} teams={teams}/></DataState></section></div><div className="home-grid"><section className="panel"><div className="section-title"><div><div className="eyebrow">GOLDEN BOOT</div><h2>Top goal scorers</h2></div><Link href="/top-scorers">All scorers <ArrowRight/></Link></div><div className="home-leader-mini-grid"><div><div className="home-leader-subtitle"><span>GOLDEN BOOT</span><small>Goal leaders</small></div><DataState loading={data.scorers.isLoading} error={data.scorers.error} empty={!data.scorers.isLoading && !(data.scorers.data ?? []).some(player => player.goals > 0)}>{(data.scorers.data ?? []).filter(player => player.goals > 0).slice(0, 3).map(player => <p className="scorer-row" key={player.id}>{player.photoUrl ? <span className="scorer-avatar" style={{backgroundImage:'url('+player.photoUrl+')'}}/> : <span className="scorer-avatar">{player.name.slice(0,1).toUpperCase()}</span>}<b>{player.name}</b><span>{player.goals} goals</span></p>)}</DataState></div><div><div className="home-leader-subtitle"><span>PLAYMAKERS</span><small>Assist leaders</small></div><DataState loading={data.assists.isLoading} error={data.assists.error} empty={!data.assists.isLoading && !(data.assists.data ?? []).length}>{(data.assists.data ?? []).slice(0, 3).map(player => <p className="scorer-row" key={player.id}>{player.photoUrl ? <span className="scorer-avatar" style={{backgroundImage:'url('+player.photoUrl+')'}}/> : <span className="scorer-avatar">{player.name.slice(0,1).toUpperCase()}</span>}<b>{player.name}</b><span>{player.assists} assists</span></p>)}</DataState></div></div></section><section className="panel"><div className="section-title"><div><div className="eyebrow">LATEST</div><h2>News and announcements</h2></div><Link href="/news">All news <ArrowRight/></Link></div><DataState loading={data.announcements.isLoading} error={data.announcements.error} empty={!data.announcements.isLoading && !announcements.length}><Announcements list={announcements.slice(0, 2)}/></DataState></section></div></section></Shell>
+  return <Shell><section className="hero"><HeroSlideshow/><div className="hero-content"><div className="hero-kicker"><span className="live-dot"/> OFFICIAL TOURNAMENT INFORMATION</div><h1>Football brings<br/><em>us together.</em></h1><p>{data.settings.error ? 'Tournament information is unavailable right now.' : data.settings.data?.tournament.name ?? 'Tournament name not published'}</p><div className="hero-info"><span><Flag/>RUKPOKWU, PORT HARCOURT</span><span><CalendarDays/>RIVERS STATE, NIGERIA</span></div><div className="hero-actions"><Link href="/fixtures" className="button-primary">Explore fixtures <ArrowRight/></Link><Link href="/standings" className="button-ghost">View standings</Link></div></div><div className="hero-aside"><div className="tournament-badge"><div className="badge-line">ANNUAL TOURNAMENT</div><Trophy/><strong>2026</strong><span>RUKPOKWU, NIGERIA</span></div></div></section><section className="content-section"><div className="section-title"><div><div className="eyebrow">OFFICIAL UPDATES</div><h2>Tournament at a glance</h2></div><LiveUpdated at={data.updatedAt.teams}/></div><div className="quick-stats"><div><span>ACTIVE TEAMS</span><strong>{data.teams.error ? 'Unavailable' : data.teams.isLoading ? '—' : active.length || '—'}</strong><small>{data.teams.error ? 'Connection error' : active.length ? 'Currently participating' : 'No teams published'}</small></div><div><span>CONFIRMED RESULTS</span><strong>{data.matches.error ? 'Unavailable' : data.matches.isLoading ? '—' : results.length || '—'}</strong><small>{data.matches.error ? 'Connection error' : results.length ? 'Official results' : 'No confirmed results'}</small></div><div><span>UPCOMING FIXTURES</span><strong>{data.matches.error ? 'Unavailable' : data.matches.isLoading ? '—' : fixtures.length || '—'}</strong><small>{data.matches.error ? 'Connection error' : fixtures.length ? 'Published schedule' : 'No upcoming fixtures'}</small></div><div><span>ANNOUNCEMENTS</span><strong>{data.announcements.error ? 'Unavailable' : data.announcements.isLoading ? '—' : announcements.length || '—'}</strong><small>{data.announcements.error ? 'Connection error' : announcements.length ? 'Published updates' : 'No announcements published'}</small></div></div><NewsSpotlight list={announcements}/>{featuredResults.length>0 && <section className="content-section featured-match-section"><div className="section-title"><div><div className="eyebrow">LATEST MATCH RESULTS</div><h2>Matchday highlights</h2></div><div className="match-history-home-links"><Link href="/results">All results <ArrowRight/></Link><Link href="/history">Match history <ArrowRight/></Link></div></div><MatchList list={featuredResults} teams={teams}/></section>}<div className="home-grid"><section className="panel"><div className="section-title"><div><div className="eyebrow">THE TABLE</div><h2>League standings</h2></div><Link href="/standings">Full table <ArrowRight/></Link></div><DataState loading={data.standings.isLoading} error={data.standings.error} empty={!data.standings.isLoading && !(data.standings.data ?? []).length}><Standings list={(data.standings.data ?? []).slice(0, 5)}/></DataState></section><section className="panel"><div className="section-title"><div><div className="eyebrow">NEXT UP</div><h2>Fixtures & live matches</h2></div><Link href="/fixtures">All fixtures <ArrowRight/></Link></div><DataState loading={data.matches.isLoading} error={data.matches.error} empty={!data.matches.isLoading && !fixtures.length}><MatchList list={fixtures.slice(0, 3)} teams={teams}/></DataState></section></div><div className="home-grid"><section className="panel"><div className="section-title"><div><div className="eyebrow">GOLDEN BOOT</div><h2>Top goal scorers</h2></div><Link href="/top-scorers">All scorers <ArrowRight/></Link></div><div className="home-leader-mini-grid"><div><div className="home-leader-subtitle"><span>GOLDEN BOOT</span><small>Goal leaders</small></div><DataState loading={data.scorers.isLoading} error={data.scorers.error} empty={!data.scorers.isLoading && !(data.scorers.data ?? []).some(player => player.goals > 0)}>{(data.scorers.data ?? []).filter(player => player.goals > 0).slice(0, 3).map(player => <p className="scorer-row" key={player.id}>{player.photoUrl ? <span className="scorer-avatar" style={{backgroundImage:'url('+player.photoUrl+')'}}/> : <span className="scorer-avatar">{player.name.slice(0,1).toUpperCase()}</span>}<b>{player.name}</b><span>{player.goals} goals</span></p>)}</DataState></div><div><div className="home-leader-subtitle"><span>PLAYMAKERS</span><small>Assist leaders</small></div><DataState loading={data.assists.isLoading} error={data.assists.error} empty={!data.assists.isLoading && !(data.assists.data ?? []).length}>{(data.assists.data ?? []).slice(0, 3).map(player => <p className="scorer-row" key={player.id}>{player.photoUrl ? <span className="scorer-avatar" style={{backgroundImage:'url('+player.photoUrl+')'}}/> : <span className="scorer-avatar">{player.name.slice(0,1).toUpperCase()}</span>}<b>{player.name}</b><span>{player.assists} assists</span></p>)}</DataState></div></div></section><section className="panel"><div className="section-title"><div><div className="eyebrow">LATEST</div><h2>News and announcements</h2></div><Link href="/news">All news <ArrowRight/></Link></div><DataState loading={data.announcements.isLoading} error={data.announcements.error} empty={!data.announcements.isLoading && !announcements.length}><Announcements list={announcements.slice(0, 2)}/></DataState></section></div></section></Shell>
 }
 
 export function PublicHome() { return <Landing/> }
