@@ -155,11 +155,13 @@ export function AdminMatchManager({ rows, teams, players, loading, error, refres
     event.preventDefault()
     if (!match) return
     if (fixtureHomeId === fixtureAwayId) { setNotice('Choose two different teams for this fixture.'); return }
-    if (completed && fixtureReason.trim().length < 5) { setNotice('Enter a correction reason of at least five characters for the confirmed fixture details.'); return }
-    await run(() => api.matches.updateDetails(match.id, completed
-      ? { date: fixtureDate, time: fixtureTime, venue: fixtureVenue, round: fixtureRound, reason: fixtureReason.trim() }
-      : { homeId: fixtureHomeId, awayId: fixtureAwayId, date: fixtureDate, time: fixtureTime, venue: fixtureVenue, round: fixtureRound }),
-      'Fixture details updated and recorded.')
+    const teamsChanged = fixtureHomeId !== match.homeId || fixtureAwayId !== match.awayId
+    const requiresReason = match.status !== 'scheduled' || teamsChanged
+    if (requiresReason && fixtureReason.trim().length < 5) { setNotice('Enter a correction reason of at least five characters for this fixture correction.'); return }
+    await run(() => api.matches.updateDetails(match.id, {
+      homeId: fixtureHomeId, awayId: fixtureAwayId, date: fixtureDate, time: fixtureTime, venue: fixtureVenue, round: fixtureRound,
+      ...(requiresReason ? { reason: fixtureReason.trim() } : {}),
+    }), 'Fixture details corrected and recorded. Public fixtures and results will refresh automatically.')
     setFixtureReason('')
   }
   async function saveReport(event: React.FormEvent<HTMLFormElement>) {
@@ -190,6 +192,29 @@ export function AdminMatchManager({ rows, teams, players, loading, error, refres
       await run(() => api.matches.correct(match.id, { homeScore: score.home, awayScore: score.away, reason: reason.trim() }), 'Confirmed score corrected. The correction is recorded in the audit log.')
     } catch (cause) { setNotice(cause instanceof Error ? cause.message : 'Enter a valid score.') }
   }
+  async function deleteMatch() {
+    if (!match) return
+    const reason = window.prompt('Reason for deleting this match/fixture and its result (at least five characters):')
+    if (!reason || reason.trim().length < 5) return
+    const label = homeName + ' ' + (match.homeScore ?? '—') + '–' + (match.awayScore ?? '—') + ' ' + awayName
+    if (!window.confirm('Permanently delete ' + label + '? Its match events will also be removed from active records. A complete snapshot and your reason will remain in the audit log.')) return
+    setPending(true)
+    setNotice('')
+    try {
+      await api.matches.removeWithReason(match.id, reason.trim())
+      const nextMatch = rows.find(item => item.id !== match.id)
+      setSelectedId(nextMatch?.id ?? '')
+      await refresh()
+      setNotice('Match/fixture deleted. The deletion snapshot is retained in the audit log and public standings have been recalculated.')
+      setEditingEventId(null)
+      setEventCorrectionReason('')
+    } catch (cause) {
+      setNotice(cause instanceof Error ? cause.message : 'The match could not be deleted.')
+    } finally {
+      setPending(false)
+    }
+  }
+
   async function uploadImage(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.currentTarget.files?.[0]
     event.currentTarget.value = ''
@@ -235,21 +260,21 @@ export function AdminMatchManager({ rows, teams, players, loading, error, refres
           </div>
           {match.status === 'scheduled' && <button type="button" className="button-publish" disabled={pending} onClick={startMatch}><Play/> Start match — publish LIVE status</button>}
           {match.status === 'cancelled' && <p className="admin-editor-footnote">This fixture has been cancelled and cannot be started.</p>}
+          <div className="admin-editor-actions admin-match-danger-actions"><button type="button" className="button-outline" disabled={pending} onClick={deleteMatch}>Delete match / result</button></div>
         </section>
 
         <form className="panel admin-match-manager-form" onSubmit={saveFixtureDetails}>
-          <div className="admin-match-section-heading"><div><span className="eyebrow">FIXTURE DETAILS</span><h2>Edit match information</h2><p>Correct the schedule, venue or matchday details. Confirmed results keep their teams and scores protected; changes are recorded in the audit log.</p></div><CalendarDays/></div>
+          <div className="admin-match-section-heading"><div><span className="eyebrow">FIXTURE DETAILS</span><h2>Edit match information</h2><p>Correct the teams, schedule, venue or matchday details for any fixture. Live, cancelled and completed corrections require a reason; recorded player events must still belong to the selected teams.</p></div><CalendarDays/></div>
           <div className="admin-match-report-grid">
-            <label>Home team<select value={fixtureHomeId} disabled={completed || match.status !== 'scheduled'} onChange={e => setFixtureHomeId(e.target.value)}>{teams.map(team => <option key={team.id} value={team.id}>{team.name}</option>)}</select></label>
-            <label>Away team<select value={fixtureAwayId} disabled={completed || match.status !== 'scheduled'} onChange={e => setFixtureAwayId(e.target.value)}>{teams.map(team => <option key={team.id} value={team.id}>{team.name}</option>)}</select></label>
+            <label>Home team<select value={fixtureHomeId} onChange={e => setFixtureHomeId(e.target.value)}>{teams.map(team => <option key={team.id} value={team.id}>{team.name}</option>)}</select></label>
+            <label>Away team<select value={fixtureAwayId} onChange={e => setFixtureAwayId(e.target.value)}>{teams.map(team => <option key={team.id} value={team.id}>{team.name}</option>)}</select></label>
             <label>Match date<input type="date" required value={fixtureDate} onChange={e => setFixtureDate(e.target.value)}/></label>
             <label>Kick-off time<input type="time" required value={fixtureTime} onChange={e => setFixtureTime(e.target.value)}/></label>
             <label>Venue<input required maxLength={120} value={fixtureVenue} onChange={e => setFixtureVenue(e.target.value)}/></label>
             <label>Round / matchday<input required maxLength={80} value={fixtureRound} onChange={e => setFixtureRound(e.target.value)}/></label>
           </div>
-          {completed && <label>Correction reason (required)<input required minLength={5} maxLength={500} value={fixtureReason} onChange={e => setFixtureReason(e.target.value)} placeholder="Why are these confirmed fixture details being corrected?"/></label>}
-          <button className="button-outline" type="submit" disabled={pending || !['scheduled','completed'].includes(match.status)}><Save/> Save fixture changes</button>
-          {!['scheduled','completed'].includes(match.status) && <small className="admin-editor-footnote">Fixture details cannot be changed while this match is live or cancelled.</small>}
+          {(completed || isLive || match.status === 'cancelled' || fixtureHomeId !== match.homeId || fixtureAwayId !== match.awayId) && <label>Correction reason (required)<input required minLength={5} maxLength={500} value={fixtureReason} onChange={e => setFixtureReason(e.target.value)} placeholder="Why are these fixture details being corrected?"/></label>}
+          <button className="button-outline" type="submit" disabled={pending}><Save/> Save fixture changes</button>
         </form>
 
         {(isLive || !completed) && <form className="panel admin-match-manager-form" onSubmit={saveLiveScore}>

@@ -89,9 +89,19 @@ export function AdminConsole() {
   }
   async function remove(row: Row) {
     const label = pretty(row.name ?? row.title ?? row.id)
+    const reason = section === 'fixtures' || section === 'matches' ? window.prompt('Reason for deleting this fixture and its match events (at least five characters):') : ''
+    if ((section === 'fixtures' || section === 'matches') && (!reason || reason.trim().length < 5)) return
     if (!window.confirm(`Delete ${label}? This action will be recorded by the backend and cannot be undone.`)) return
-    try { if (section === 'teams') await api.teams.remove(row.id); else if (section === 'players') await api.players.remove(row.id); else if (section === 'fixtures') await api.fixtures.remove(row.id); else if (section === 'matches') await api.matches.remove(row.id); else if (section === 'announcements') await api.announcements.remove(row.id); else if (section === 'users') await api.users.remove(row.id); await refreshRecords(); setNotice('Record deleted.') }
-    catch (deleteError) { setNotice(deleteError instanceof Error ? deleteError.message : 'Delete request failed.') }
+    try {
+      if (section === 'teams') await api.teams.remove(row.id)
+      else if (section === 'players') await api.players.remove(row.id)
+      else if (section === 'fixtures') await api.fixtures.removeWithReason(row.id, reason!.trim())
+      else if (section === 'matches') await api.matches.removeWithReason(row.id, reason!.trim())
+      else if (section === 'announcements') await api.announcements.remove(row.id)
+      else if (section === 'users') await api.users.remove(row.id)
+      await refreshRecords()
+      setNotice('Record deleted.')
+    } catch (deleteError) { setNotice(deleteError instanceof Error ? deleteError.message : 'Delete request failed.') }
   }
   async function toggleTeam(row: Row) { const nextActive = !Boolean(row.active); if (!nextActive && !window.confirm('Deactivate this team’s tournament participation? The backend will retain its records.')) return; try { await api.teams.setActive(row.id, nextActive); await refreshRecords(); setNotice('Participation updated.') } catch (e) { setNotice(e instanceof Error ? e.message : 'Participation could not be updated.') } }
   async function logout() { try { await api.auth.logout(); await mutate('admin-session', undefined, false); router.replace('/admin/login') } catch(e) { setNotice(e instanceof Error ? e.message : 'Could not sign out.') } }

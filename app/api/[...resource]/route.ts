@@ -7,6 +7,7 @@ import { hashPassword } from '@/lib/server/auth'
 import { seedTournamentDefaults } from '@/lib/server/seed'
 import { apiError } from '@/lib/server/http'
 import { matchSchema } from '@/lib/validation'
+import { invalidatePublishedStandingsSnapshot } from '@/lib/server/statistics'
 import { TeamModel, PlayerModel, MatchModel, MatchEventModel, AnnouncementModel, TournamentSettingsModel, AdminUserModel, AuditLogModel, PlayerTournamentStatsModel } from '@/lib/server/models'
 
 export const runtime = 'nodejs'
@@ -119,8 +120,21 @@ export async function POST(request: NextRequest, context: Ctx) {
     if(id && sub==='reschedule') { if(!idOK(id))return fail('Invalid match id.'); const m=await MatchModel.findByIdAndUpdate(id,{$set:{date:body.date,time:body.time,venue:body.venue}},{new:true,runValidators:true}); if(!m)return fail('Fixture not found.',404,'NOT_FOUND'); await audit(a.user,'fixture.rescheduled','match',id,body); return json(matchOut(m)) }
     if(id && sub==='cancel') { const current=await MatchModel.findById(id);if(!current)return fail('Fixture not found.',404,'NOT_FOUND');if(['completed','cancelled'].includes(current.status))return fail('A completed or cancelled match cannot be cancelled again.',409,'MATCH_STATE_CONFLICT');const m=await MatchModel.findByIdAndUpdate(id,{$set:{status:'cancelled'}},{new:true}); await audit(a.user,'fixture.cancelled','match',id,{reason:body.reason}); return json(matchOut(m)) }
     if(id && sub==='start') { const current=await MatchModel.findById(id);if(!current)return fail('Match not found.',404,'NOT_FOUND');if(current.status!=='scheduled')return fail('Only a scheduled match can be started.',409,'MATCH_STATE_CONFLICT');const m=await MatchModel.findByIdAndUpdate(id,{$set:{status:'live',homeScore:current.homeScore??0,awayScore:current.awayScore??0,matchMinute:current.matchMinute??0,startedAt:new Date()}},{new:true}); await audit(a.user,'match.started','match',id); return json(matchOut(m)) }
-    if(id && sub==='complete') { const m=await MatchModel.findById(id); if(!m)return fail('Match not found.',404,'NOT_FOUND');if(!['live','scheduled'].includes(m.status))return fail('Only a scheduled or live match can be confirmed.',409,'MATCH_STATE_CONFLICT'); if(m.homeScore==null||m.awayScore==null)return fail('Enter both match scores before confirming the result.'); m.status='completed'; m.finishedAt=new Date(); m.matchMinute=m.matchMinute??90; m.confirmedAt=new Date(); m.confirmedBy=a.user.id; await m.save(); await audit(a.user,'match.confirmed','match',id,{homeScore:m.homeScore,awayScore:m.awayScore}); return json(matchOut(m)) }
-    if(id && sub==='corrections') { const m=await MatchModel.findById(id); if(!m)return fail('Match not found.',404,'NOT_FOUND'); const before={homeScore:m.homeScore,awayScore:m.awayScore,status:m.status}; if(body.homeScore!=null)m.homeScore=Number(body.homeScore); if(body.awayScore!=null)m.awayScore=Number(body.awayScore); if(body.reason==null||String(body.reason).trim().length<5)return fail('Provide a correction reason of at least five characters.'); m.confirmedAt=new Date();m.confirmedBy=a.user.id;m.status='completed';m.finishedAt=new Date();m.matchMinute=m.matchMinute??90;await m.save();await audit(a.user,'match.corrected','match',id,{before,after:{homeScore:m.homeScore,awayScore:m.awayScore},reason:body.reason});return json(matchOut(m)) }
+    if(id && sub==='complete') { const m=await MatchModel.findById(id); if(!m)return fail('Match not found.',404,'NOT_FOUND');if(!['live','scheduled'].includes(m.status))return fail('Only a scheduled or live match can be confirmed.',409,'MATCH_STATE_CONFLICT'); if(m.homeScore==null||m.awayScore==null)return fail('Enter both match scores before confirming the result.'); m.status='completed'; m.finishedAt=new Date(); m.matchMinute=m.matchMinute??90; m.confirmedAt=new Date(); m.confirmedBy=a.user.id; await m.save(); const standingsSnapshotInvalidated=await invalidatePublishedStandingsSnapshot(); await audit(a.user,'match.confirmed','match',id,{homeScore:m.homeScore,awayScore:m.awayScore,standingsSnapshotInvalidated:Boolean(standingsSnapshotInvalidated),previousStandingsPublishedAt:standingsSnapshotInvalidated}); return json(matchOut(m)) }
+    if(id && sub==='corrections') {
+      if(!idOK(id))return fail('Match not found.',404,'NOT_FOUND')
+      const m=await MatchModel.findById(id);if(!m)return fail('Match not found.',404,'NOT_FOUND')
+      const reason=typeof body.reason==='string'?body.reason.trim():''
+      if(reason.length<5)return fail('Provide a correction reason of at least five characters.',400,'REASON_REQUIRED')
+      const homeScore=Number(body.homeScore),awayScore=Number(body.awayScore)
+      if(!Number.isInteger(homeScore)||homeScore<0||homeScore>99||!Number.isInteger(awayScore)||awayScore<0||awayScore>99)return fail('Both corrected scores must be whole numbers between 0 and 99.')
+      const before={homeScore:m.homeScore,awayScore:m.awayScore,status:m.status,matchMinute:m.matchMinute,confirmedAt:m.confirmedAt}
+      m.homeScore=homeScore;m.awayScore=awayScore;m.confirmedAt=new Date();m.confirmedBy=a.user.id;m.status='completed';m.finishedAt=new Date();m.matchMinute=m.matchMinute??90
+      await m.save()
+      const standingsSnapshotInvalidated=await invalidatePublishedStandingsSnapshot()
+      await audit(a.user,'match.corrected','match',id,{before,after:{homeScore:m.homeScore,awayScore:m.awayScore,status:m.status,matchMinute:m.matchMinute},reason,standingsSnapshotInvalidated:Boolean(standingsSnapshotInvalidated),previousStandingsPublishedAt:standingsSnapshotInvalidated})
+      return json(matchOut(m))
+    }
     if(id && sub==='events') { if(!idOK(id))return fail('Invalid match id.'); const m=await MatchModel.findById(id); if(!m)return fail('Match not found.',404,'NOT_FOUND'); if(!['live','scheduled'].includes(m.status))return fail('Events can only be added before a match is confirmed.'); const player:any=await PlayerModel.findById(body.playerId).lean(); if(!idOK(body.playerId)||!player)return fail('Select a valid player.'); if(!['goal','assist','yellow_card','red_card','own_goal'].includes(body.type)||!Number.isInteger(Number(body.minute))||Number(body.minute)<0||Number(body.minute)>150)return fail('Invalid match event.'); const playerTeam=String(player.teamId); if(![String(m.homeId),String(m.awayId)].includes(playerTeam))return fail('The selected player does not belong to either team in this match.'); const suspension=await PlayerTournamentStatsModel.findOne({playerId:player._id,suspendedForMatchId:id}).lean(); if(suspension)return fail('This player is marked as suspended for this match and cannot have match events recorded.',409,'PLAYER_SUSPENDED'); const ev=await MatchEventModel.create({matchId:id,playerId:body.playerId,type:body.type,minute:Number(body.minute),note:body.note}); m.matchMinute=Math.max(Number(m.matchMinute??0),Number(body.minute));if(body.type==='goal'||body.type==='own_goal'){const homeScored=(body.type==='goal'&&playerTeam===String(m.homeId))||(body.type==='own_goal'&&playerTeam===String(m.awayId));const field=homeScored?'homeScore':'awayScore';m.set(field,Number(m.get(field)??0)+1);await m.save()}else{await m.save()} await audit(a.user,'match.event.created','match-event',String(ev._id),{matchId:id,type:body.type}); return json({id:String(ev._id),matchId:id,playerId:String(ev.playerId),type:ev.type,minute:ev.minute,note:ev.note,score:{home:m.homeScore??0,away:m.awayScore??0}},201) }
     const parsed=matchSchema.safeParse(body);if(!parsed.success)return apiError(parsed.error);const {homeId,awayId,date,time,venue,round}=parsed.data
     if(!idOK(homeId)||!idOK(awayId)||!(await TeamModel.exists({_id:homeId}))||!(await TeamModel.exists({_id:awayId})))return fail('Select two different existing teams.')
@@ -163,7 +177,8 @@ export async function PATCH(request: NextRequest, context: Ctx) {
      if(newSide){const field=newSide==='home'?'homeScore':'awayScore';m.set(field,Number(m.get(field)??0)+1)}
      event.playerId=body.playerId;event.type=body.type;event.minute=Number(body.minute);event.note=typeof body.note==='string'?body.note.trim():undefined
      await event.save();await m.save()
-     await audit(a.user,'match.event.corrected','match-event',extra,{matchId:id,before,after:{playerId:String(player._id),type:event.type,minute:event.minute,note:event.note,homeScore:m.homeScore,awayScore:m.awayScore},reason})
+     const standingsSnapshotInvalidated=m.status==='completed'&&oldSide!==newSide?await invalidatePublishedStandingsSnapshot():null
+     await audit(a.user,'match.event.corrected','match-event',extra,{matchId:id,before,after:{playerId:String(player._id),type:event.type,minute:event.minute,note:event.note,homeScore:m.homeScore,awayScore:m.awayScore},reason,standingsSnapshotInvalidated:Boolean(standingsSnapshotInvalidated),previousStandingsPublishedAt:standingsSnapshotInvalidated})
      return json({id:String(event._id),matchId:id,playerId:String(player._id),type:event.type,minute:event.minute,note:event.note,score:{home:m.homeScore??0,away:m.awayScore??0}})
    }
 if(resource==='matches'&&id&&sub==='live-score') { const a=await auth(request,'matches');if(a.response)return a.response;if(!idOK(id))return fail('Match not found.',404,'NOT_FOUND');const m=await MatchModel.findById(id);if(!m)return fail('Match not found.',404,'NOT_FOUND');if(m.status!=='live')return fail('Live score updates are only available after the match has been started.',409,'MATCH_STATE_CONFLICT');const homeScore=Number(body.homeScore),awayScore=Number(body.awayScore),matchMinute=Number(body.matchMinute);if(!Number.isInteger(homeScore)||homeScore<0||homeScore>99||!Number.isInteger(awayScore)||awayScore<0||awayScore>99||!Number.isInteger(matchMinute)||matchMinute<0||matchMinute>150)return fail('Enter valid scores from 0 to 99 and a match minute from 0 to 150.');const before={homeScore:m.homeScore,awayScore:m.awayScore,matchMinute:m.matchMinute};m.homeScore=homeScore;m.awayScore=awayScore;m.matchMinute=matchMinute;await m.save();await audit(a.user,'match.live_score.updated','match',id,{before,after:{homeScore,awayScore,matchMinute}});return json(matchOut(m)) }
@@ -173,7 +188,41 @@ if(resource==='matches'&&id&&sub==='live-score') { const a=await auth(request,'m
   if(resource==='teams'||resource==='players') { const a=await auth(request,resource as 'teams'|'players');if(a.response)return a.response;if(!idOK(id))return fail('Record not found.',404,'NOT_FOUND');const Model:any=resource==='teams'?TeamModel:PlayerModel;const data={...body};if(resource==='players'&&data.teamId&&!idOK(data.teamId))return fail('Invalid team.');if(resource==='teams'&&data.logoUrl&& !/^https:\/\//i.test(String(data.logoUrl)))return fail('Use a secure public HTTPS image URL for the team logo.');const x=await Model.findByIdAndUpdate(id,{$set:data},{new:true,runValidators:true}).populate?.(resource==='players'?'teamId':'')??await Model.findById(id);if(!x)return fail('Record not found.',404,'NOT_FOUND');await audit(a.user,resource.slice(0,-1)+'.updated',resource,id);return json(resource==='teams'?teamOut(x):playerOut(x)) }
   if(resource==='admin'&&id==='users'&&extra==='role') { const a=await auth(request,'users');if(a.response)return a.response;const userId=sub;if(!userId||!idOK(userId)||!roles.includes(body.role))return fail('Valid administrator id and role are required.');const u=await AdminUserModel.findByIdAndUpdate(userId,{$set:{role:body.role}},{new:true});if(!u)return fail('Administrator not found.',404,'NOT_FOUND');await audit(a.user,'admin.role.updated','admin-user',userId,{role:body.role});return json({id:String(u._id),name:u.name,email:u.email,role:u.role,active:u.active}) }
   if(resource==='admin'&&id==='users'&&sub&&!extra) { const a=await auth(request,'users');if(a.response)return a.response;if(!idOK(sub))return fail('Administrator not found.',404,'NOT_FOUND');const patch:any={};if(body.name!==undefined){if(typeof body.name!=='string'||body.name.trim().length<2||body.name.trim().length>80)return fail('Administrator name must be between 2 and 80 characters.');patch.name=body.name.trim()}if(body.email!==undefined){if(typeof body.email!=='string'||!/^\S+@\S+\.\S+$/.test(body.email.trim()))return fail('Enter a valid administrator email.');const email=body.email.trim().toLowerCase();if(await AdminUserModel.exists({email,_id:{$ne:sub}}))return fail('An administrator with this email already exists.',409,'EMAIL_EXISTS');patch.email=email}if(body.role!==undefined){if(!roles.includes(body.role))return fail('Select a valid administrator role.');if(sub===a.user.id)return fail('You cannot change your own administrator role.',409,'SELF_ROLE_CHANGE');patch.role=body.role}if(body.active!==undefined){if(typeof body.active!=='boolean')return fail('Administrator active status must be true or false.');if(sub===a.user.id&&!body.active)return fail('You cannot deactivate your own active administrator account.',409,'SELF_DEACTIVATION');patch.active=body.active}if(!Object.keys(patch).length)return fail('No editable administrator fields were supplied.');const u=await AdminUserModel.findByIdAndUpdate(sub,{$set:patch},{new:true,runValidators:true});if(!u)return fail('Administrator not found.',404,'NOT_FOUND');await audit(a.user,'admin.updated','admin-user',sub,{fields:Object.keys(patch)});return json({id:String(u._id),name:u.name,email:u.email,role:u.role,active:u.active}) }
-  if((resource==='matches'||resource==='fixtures')&&id&&!sub) { const a=await auth(request,resource==='fixtures'?'fixtures':'matches');if(a.response)return a.response;if(!idOK(id))return fail('Match not found.',404,'NOT_FOUND');const current=await MatchModel.findById(id);if(!current)return fail('Match not found.',404,'NOT_FOUND');if(!['scheduled','completed'].includes(current.status))return fail('Only scheduled fixtures or confirmed fixture details can be edited.',409,'MATCH_STATE_CONFLICT');const patch:any={};for(const key of ['date','time','venue','round'])if(body[key]!==undefined)patch[key]=body[key];if(current.status==='scheduled'){for(const key of ['homeId','awayId'])if(body[key]!==undefined){if(!idOK(body[key])||!(await TeamModel.exists({_id:body[key]})))return fail('Select an existing team.');patch[key]=body[key]}}else{if(body.homeId!==undefined||body.awayId!==undefined)return fail('The teams in a confirmed result cannot be changed.');if(typeof body.reason!=='string'||body.reason.trim().length<5)return fail('A confirmed fixture correction requires a reason of at least five characters.',400,'REASON_REQUIRED')}const home=String(patch.homeId??current.homeId),away=String(patch.awayId??current.awayId);if(home===away)return fail('A match must have two different teams.');if(!Object.keys(patch).length)return fail('No editable fixture fields were supplied.');const before={date:current.date,time:current.time,venue:current.venue,round:current.round,homeId:String(current.homeId),awayId:String(current.awayId)};const m=await MatchModel.findByIdAndUpdate(id,{$set:patch},{new:true,runValidators:true});await audit(a.user,'fixture.updated','match',id,{before,after:patch,reason:body.reason});return json(matchOut(m)) }
+  if((resource==='matches'||resource==='fixtures')&&id&&!sub) {
+    const a=await auth(request,resource==='fixtures'?'fixtures':'matches');if(a.response)return a.response
+    if(!idOK(id))return fail('Match not found.',404,'NOT_FOUND')
+    const current=await MatchModel.findById(id);if(!current)return fail('Match not found.',404,'NOT_FOUND')
+    const patch:any={}
+    for(const key of ['date','time','venue','round'])if(body[key]!==undefined)patch[key]=body[key]
+    for(const key of ['homeId','awayId'])if(body[key]!==undefined){
+      const teamId=String(body[key])
+      if(!idOK(teamId)||!(await TeamModel.exists({_id:teamId})))return fail('Select an existing team for both sides.')
+      patch[key]=teamId
+    }
+    const home=String(patch.homeId??current.homeId),away=String(patch.awayId??current.awayId)
+    if(home===away)return fail('A match must have two different teams.')
+    if(patch.date!==undefined&&(!/^\\d{4}-\\d{2}-\\d{2}$/.test(String(patch.date))||Number.isNaN(Date.parse(String(patch.date)+'T00:00:00'))))return fail('Enter a valid match date.')
+    if(patch.time!==undefined&&!/^([01]\\d|2[0-3]):[0-5]\\d$/.test(String(patch.time)))return fail('Enter a valid kick-off time in HH:MM format.')
+    if(patch.venue!==undefined&&(typeof patch.venue!=='string'||!patch.venue.trim()||patch.venue.trim().length>120))return fail('Enter a venue of 1 to 120 characters.')
+    if(patch.round!==undefined&&(typeof patch.round!=='string'||!patch.round.trim()||patch.round.trim().length>80))return fail('Enter a matchday/round of 1 to 80 characters.')
+    for(const key of ['date','time','venue','round'])if(typeof patch[key]==='string')patch[key]=patch[key].trim()
+    const teamsChanged=home!==String(current.homeId)||away!==String(current.awayId)
+    const reason=typeof body.reason==='string'?body.reason.trim():''
+    if((current.status!=='scheduled'||teamsChanged)&&reason.length<5)return fail('A live, cancelled or confirmed fixture correction requires a reason of at least five characters.',400,'REASON_REQUIRED')
+    if(teamsChanged){
+      const events=await MatchEventModel.find({matchId:id}).populate('playerId','teamId').lean()
+      const allowedTeams=new Set([home,away])
+      const hasInvalidEvent=events.some((item:any)=>!item.playerId||!allowedTeams.has(String(item.playerId.teamId)))
+      if(hasInvalidEvent)return fail('Some recorded match events belong to players outside the corrected teams. Edit or remove those events first, then save the team correction.',409,'MATCH_EVENT_TEAM_CONFLICT')
+    }
+    if(!Object.keys(patch).length)return fail('No editable fixture fields were supplied.')
+    const before={homeId:String(current.homeId),awayId:String(current.awayId),date:current.date,time:current.time,venue:current.venue,round:current.round,status:current.status}
+    const m=await MatchModel.findByIdAndUpdate(id,{$set:patch},{new:true,runValidators:true})
+    if(!m)return fail('Match not found.',404,'NOT_FOUND')
+    const standingsSnapshotInvalidated=current.status==='completed'&&teamsChanged?await invalidatePublishedStandingsSnapshot():null
+    await audit(a.user,'fixture.updated','match',id,{before,after:patch,reason,standingsSnapshotInvalidated:Boolean(standingsSnapshotInvalidated),previousStandingsPublishedAt:standingsSnapshotInvalidated})
+    return json(matchOut(m))
+  }
   return fail('API endpoint not found.',404,'NOT_FOUND')
  } catch(e) { return apiError(e) }
 }
@@ -189,17 +238,45 @@ export async function DELETE(request: NextRequest, context: Ctx) {
    const deletionBody=await request.json().catch(()=>({})) as {reason?:string}
    const deletionReason=typeof deletionBody.reason==='string'?deletionBody.reason.trim():''
    if(match.status==='completed'&&match.confirmedAt&&deletionReason.length<5)return fail('Removing an event from a confirmed result requires a reason of at least five characters.',400,'REASON_REQUIRED')
-   if(event.type==='goal'||event.type==='own_goal'){const player:any=event.playerId;const teamId=String(player?.teamId);const homeScored=(event.type==='goal'&&teamId===String(match.homeId))||(event.type==='own_goal'&&teamId===String(match.awayId));const field=homeScored?'homeScore':'awayScore';match.set(field,Math.max(0,Number(match.get(field)??0)-1));await match.save()}
-   await MatchEventModel.deleteOne({_id:eventId,matchId:id});await audit(a.user,'match.event.deleted','match-event',eventId,{matchId:id,type:event.type,reason:deletionReason})
-   return new NextResponse(null,{status:204})
+   const scoreChanged=event.type==='goal'||event.type==='own_goal'
+   if(scoreChanged){const player:any=event.playerId;const teamId=String(player?.teamId);const homeScored=(event.type==='goal'&&teamId===String(match.homeId))||(event.type==='own_goal'&&teamId===String(match.awayId));const field=homeScored?'homeScore':'awayScore';match.set(field,Math.max(0,Number(match.get(field)??0)-1));await match.save()}
+   await MatchEventModel.deleteOne({_id:eventId,matchId:id})
+   const standingsSnapshotInvalidated=scoreChanged&&match.status==='completed'&&match.confirmedAt?await invalidatePublishedStandingsSnapshot():null
+   await audit(a.user,'match.event.deleted','match-event',eventId,{matchId:id,type:event.type,reason:deletionReason,standingsSnapshotInvalidated:Boolean(standingsSnapshotInvalidated),previousStandingsPublishedAt:standingsSnapshotInvalidated})
+   return new NextResponse(null,{status:204})return new NextResponse(null,{status:204})
   }
-  if(resource==='teams'||resource==='players'||resource==='matches'||resource==='fixtures'||resource==='announcements') {
-   const area=resource==='announcements'?'content':resource==='teams'?'teams':resource==='players'?'players':resource==='fixtures'?'fixtures':'matches';const a=await auth(request,area);if(a.response)return a.response
-   if(!idOK(id))return fail('Record not found.',404,'NOT_FOUND')
-   if(resource==='teams'&&await PlayerModel.exists({teamId:id}))return fail('Reassign this team’s players before deleting it.',409,'TEAM_HAS_PLAYERS')
-   if((resource==='matches'||resource==='fixtures')){const match=await MatchModel.findById(id);if(match?.status==='completed'&&match.confirmedAt)return fail('Confirmed results cannot be deleted. Use a score correction with an audit reason.',409,'CONFIRMED_RESULT_PROTECTED')}
-   const Model:any=resource==='teams'?TeamModel:resource==='players'?PlayerModel:resource==='announcements'?AnnouncementModel:MatchModel
-   const x=await Model.findByIdAndDelete(id);if(!x)return fail('Record not found.',404,'NOT_FOUND');if(resource==='matches'||resource==='fixtures')await MatchEventModel.deleteMany({matchId:id});await audit(a.user,resource.slice(0,-1)+'.deleted',resource,id);return new NextResponse(null,{status:204})
+  if(resource==='matches'||resource==='fixtures') {
+    const area=resource==='fixtures'?'fixtures':'matches'
+    const a=await auth(request,area);if(a.response)return a.response
+    if(!idOK(id))return fail('Match not found.',404,'NOT_FOUND')
+    const deletionBody=await request.json().catch(()=>({})) as {reason?:string}
+    const reason=typeof deletionBody.reason==='string'?deletionBody.reason.trim():''
+    if(reason.length<5)return fail('Enter a deletion reason of at least five characters.',400,'REASON_REQUIRED')
+    const match=await MatchModel.findById(id)
+    if(!match)return fail('Match not found.',404,'NOT_FOUND')
+    const eventRows=await MatchEventModel.find({matchId:id}).populate('playerId','name teamId').lean()
+    const snapshot={
+      homeId:String(match.homeId),awayId:String(match.awayId),date:match.date,time:match.time,venue:match.venue,round:match.round,
+      status:match.status,homeScore:match.homeScore,awayScore:match.awayScore,matchMinute:match.matchMinute,
+      resultHeadline:match.resultHeadline,resultSummary:match.resultSummary,matchReport:plain(match.matchReport),
+      highlightImageUrl:match.highlightImageUrl,featured:Boolean(match.featured),confirmedAt:match.confirmedAt,
+      events:eventRows.map((event:any)=>({id:String(event._id),playerId:String(event.playerId?._id??event.playerId),playerName:event.playerId?.name,type:event.type,minute:event.minute,note:event.note}))
+    }
+    await MatchEventModel.deleteMany({matchId:id})
+    await MatchModel.findByIdAndDelete(id)
+    const standingsSnapshotInvalidated=match.status==='completed'&&match.confirmedAt?await invalidatePublishedStandingsSnapshot():null
+    await audit(a.user,'match.deleted','match',id,{reason,snapshot,standingsSnapshotInvalidated:Boolean(standingsSnapshotInvalidated),previousStandingsPublishedAt:standingsSnapshotInvalidated})
+    return new NextResponse(null,{status:204})
+  }
+  if(resource==='teams'||resource==='players'||resource==='announcements') {
+    const area=resource==='announcements'?'content':resource==='teams'?'teams':'players'
+    const a=await auth(request,area);if(a.response)return a.response
+    if(!idOK(id))return fail('Record not found.',404,'NOT_FOUND')
+    if(resource==='teams'&&await PlayerModel.exists({teamId:id}))return fail('Reassign this team’s players before deleting it.',409,'TEAM_HAS_PLAYERS')
+    const Model:any=resource==='teams'?TeamModel:resource==='players'?PlayerModel:AnnouncementModel
+    const x=await Model.findByIdAndDelete(id);if(!x)return fail('Record not found.',404,'NOT_FOUND')
+    await audit(a.user,resource.slice(0,-1)+'.deleted',resource,id,{name:x.name??x.title})
+    return new NextResponse(null,{status:204})
   }
   if(resource==='admin'&&id==='users') {const a=await auth(request,'users');if(a.response)return a.response;if(!idOK(sub))return fail('Invalid administrator id.');if(sub===a.user.id)return fail('You cannot delete your own active administrator account.',409);const u=await AdminUserModel.findByIdAndDelete(sub);if(!u)return fail('Administrator not found.',404,'NOT_FOUND');await audit(a.user,'admin.deleted','admin-user',sub);return new NextResponse(null,{status:204})}
   return fail('API endpoint not found.',404,'NOT_FOUND')

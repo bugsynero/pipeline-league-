@@ -1,4 +1,4 @@
-import { TeamModel, MatchModel, TournamentSettingsModel, PlayerModel, MatchEventModel, DisciplineOverrideModel, PlayerTournamentStatsModel } from './models'
+import { TeamModel, MatchModel, TournamentSettingsModel, PlayerModel, MatchEventModel, DisciplineOverrideModel, PlayerTournamentStatsModel, StandingsPublicationModel } from './models'
 
 const teamOut = (team: any) => ({
   id: String(team._id),
@@ -171,4 +171,24 @@ export async function getManualPlayerStatistics(includeZero = true) {
     return row
   })
   return includeZero ? rows : rows.filter(row => row.goals > 0 || row.assists > 0 || row.yellowCards > 0 || row.redCards > 0 || Boolean(row.suspensionMatch))
+}
+
+
+/** Invalidate a manual standings snapshot after confirmed match data changes.
+ * Preserve the old publishedRows for history, but prevent stale tables/drafts
+ * from being presented or re-published after a result correction.
+ */
+export async function invalidatePublishedStandingsSnapshot(): Promise<string | null> {
+  const publication = await StandingsPublicationModel.findOne({ key: 'current' })
+  if (!publication?.publishedAt) return null
+  const previousPublishedAt = publication.publishedAt instanceof Date
+    ? publication.publishedAt.toISOString()
+    : String(publication.publishedAt)
+  publication.publishedAt = undefined
+  publication.publishedBy = undefined
+  publication.draftRows = []
+  publication.draftUpdatedAt = undefined
+  publication.draftUpdatedBy = undefined
+  await publication.save()
+  return previousPublishedAt
 }

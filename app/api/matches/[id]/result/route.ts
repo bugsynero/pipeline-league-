@@ -4,6 +4,7 @@ import { connectToDatabase } from '@/lib/server/db'
 import { requireAdmin, canManage } from '@/lib/server/authorization'
 import { MatchModel, AuditLogModel } from '@/lib/server/models'
 import { apiError } from '@/lib/server/http'
+import { invalidatePublishedStandingsSnapshot } from '@/lib/server/statistics'
 
 export const runtime = 'nodejs'
 type Context = { params: Promise<{ id: string }> }
@@ -45,9 +46,10 @@ export async function POST(request: NextRequest, context: Context) {
     if (imageUrl) match.highlightImageUrl = imageUrl
     match.featured = body.featured === true
     await match.save()
+    const standingsSnapshotInvalidated = await invalidatePublishedStandingsSnapshot()
     await AuditLogModel.create({
       actorId: auth.user.id, actor: auth.user.email, action: 'match.result.published', resource: 'match', resourceId: id,
-      metadata: { before, after: { status: match.status, homeScore, awayScore }, resultHeadline: match.resultHeadline, hasImage: Boolean(match.highlightImageUrl) },
+      metadata: { before, after: { status: match.status, homeScore, awayScore }, resultHeadline: match.resultHeadline, hasImage: Boolean(match.highlightImageUrl), standingsSnapshotInvalidated: Boolean(standingsSnapshotInvalidated), previousStandingsPublishedAt: standingsSnapshotInvalidated },
     })
     return NextResponse.json({
       id: String(match._id), homeId: String(match.homeId), awayId: String(match.awayId),
