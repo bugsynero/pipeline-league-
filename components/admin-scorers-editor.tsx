@@ -34,6 +34,7 @@ export function AdminScorersEditor({ rows, loading, error, refresh }: { rows: Sc
   }
   async function save(player: ScorerRow) {
     const value = values[player.id] ?? { goals: player.goals, assists: player.assists, appearances: player.appearances, reason: '' }
+    if (value.reason.trim().length < 5) { setProblem('Enter a correction reason of at least five characters for ' + player.name + '.'); return }
     setBusy(player.id); setProblem(''); setMessage('')
     try {
       await api.playerStatistics.update(player.id, { goals: value.goals, assists: value.assists, appearances: value.appearances, ...(value.reason.trim() ? { reason: value.reason.trim() } : {}) })
@@ -50,17 +51,17 @@ export function AdminScorersEditor({ rows, loading, error, refresh }: { rows: Sc
   if (loading) return <div className="empty-state">Loading registered players…</div>
   if (error) return <div className="empty-state" role="alert">Could not load scorer records. <button onClick={() => refresh()}>Retry</button></div>
   return <section className="panel admin-editor-card">
-    <header className="admin-editor-heading"><div><span className="eyebrow">GOLDEN BOOT MANAGEMENT</span><h2>Manually publish player scoring records</h2><p>Register the player first under Players, then set their official goals, assists and appearances here. These admin-saved figures alone control the public Golden Boot ranking. Use +1 beside goals or assists to record each contribution quickly, then save the player’s statistics.</p></div></header>
+    <header className="admin-editor-heading"><div><span className="eyebrow">GOLDEN BOOT MANAGEMENT</span><h2>Manually publish player scoring records</h2><p>Register the player first under Players, then set or correct their official goals, assists and appearances here. Changes update the public Golden Boot and playmaker rankings. Enter a correction reason so every adjustment is recorded in the audit log.</p></div></header>
     {problem && <p className="form-error" role="alert">{problem}</p>}
     {message && <p className="admin-success-message" role="status">{message}</p>}
-    <div className="table-wrap"><table className="standings-table admin-edit-table"><thead><tr><th>PLAYER</th><th>TEAM</th><th>APPEARANCES</th><th>GOALS</th><th>ASSISTS</th><th>ADMIN NOTE</th><th>ACTION</th></tr></thead><tbody>
+    <div className="table-wrap"><table className="standings-table admin-edit-table"><thead><tr><th>PLAYER</th><th>TEAM</th><th>APPEARANCES</th><th>GOALS</th><th>ASSISTS</th><th>CORRECTION REASON</th><th>ACTION</th></tr></thead><tbody>
       {rows.map(player => <tr key={player.id}>
         <td><div className="admin-player-identity">{player.photoUrl ? <span className="admin-player-avatar" style={{ backgroundImage: 'url(' + player.photoUrl + ')' }} /> : <span className="admin-player-avatar">{player.name.slice(0,1).toUpperCase()}</span>}<span><b>{player.name}</b><small>#{player.number}</small></span></div></td>
         <td>{player.team?.name ?? '—'}</td>
         <td><input aria-label={'Appearances for ' + player.name} type="number" min="0" max="999" value={values[player.id]?.appearances ?? player.appearances} onChange={e => update(player.id, 'appearances', e.target.value)} /></td>
         <td><div className="admin-stat-control"><input aria-label={'Goals for ' + player.name} type="number" min="0" max="999" value={values[player.id]?.goals ?? player.goals} onChange={e => update(player.id, 'goals', e.target.value)} /><button type="button" className="button-outline admin-quick-increment" aria-label={'Add one goal for ' + player.name} onClick={() => addGoal(player)}>+1</button></div></td>
         <td><div className="admin-stat-control"><input aria-label={'Assists for ' + player.name} type="number" min="0" max="999" value={values[player.id]?.assists ?? player.assists} onChange={e => update(player.id, 'assists', e.target.value)} /><button type="button" className="button-outline admin-quick-increment" aria-label={'Add one assist for ' + player.name} onClick={() => addAssist(player)}>+1</button></div></td>
-        <td><input aria-label={'Admin note for ' + player.name} value={values[player.id]?.reason ?? ''} placeholder="Optional note for audit" onChange={e => update(player.id, 'reason', e.target.value)} /></td>
+        <td><input aria-label={'Admin note for ' + player.name} value={values[player.id]?.reason ?? ''} placeholder="Required reason (at least 5 characters)" minLength={5} maxLength={500} onChange={e => update(player.id, 'reason', e.target.value)} /></td>
         <td><button className="button-primary" disabled={busy !== null} onClick={() => save(player)}><Save />{busy === player.id ? 'Saving…' : 'Save stats'}</button></td>
       </tr>)}
     </tbody></table></div>

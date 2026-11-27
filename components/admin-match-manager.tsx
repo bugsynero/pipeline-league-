@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import useSWR from 'swr'
-import { Activity, Cloud, Flag, Play, Save, ShieldAlert, Square, Trophy, Upload, Wind } from 'lucide-react'
+import { Activity, CalendarDays, Cloud, Flag, Play, Save, ShieldAlert, Square, Trophy, Upload, Wind } from 'lucide-react'
 import { api } from '@/lib/services/api'
 import type { Match, MatchEvent, MatchEventType, Player, Team } from '@/lib/types'
 
@@ -21,6 +21,15 @@ export function AdminMatchManager({ rows, teams, players, loading, error, refres
   const [eventType, setEventType] = useState<MatchEventType>('goal')
   const [eventMinute, setEventMinute] = useState('1')
   const [eventNote, setEventNote] = useState('')
+  const [editingEventId, setEditingEventId] = useState<string | null>(null)
+  const [eventCorrectionReason, setEventCorrectionReason] = useState('')
+  const [fixtureHomeId, setFixtureHomeId] = useState('')
+  const [fixtureAwayId, setFixtureAwayId] = useState('')
+  const [fixtureDate, setFixtureDate] = useState('')
+  const [fixtureTime, setFixtureTime] = useState('')
+  const [fixtureVenue, setFixtureVenue] = useState('')
+  const [fixtureRound, setFixtureRound] = useState('')
+  const [fixtureReason, setFixtureReason] = useState('')
   const [headline, setHeadline] = useState('')
   const [summary, setSummary] = useState('')
   const [weather, setWeather] = useState('')
@@ -44,6 +53,16 @@ export function AdminMatchManager({ rows, teams, players, loading, error, refres
     setHomeScore(String(match.homeScore ?? 0))
     setAwayScore(String(match.awayScore ?? 0))
     setMinute(String(match.matchMinute ?? 0))
+    setFixtureHomeId(match.homeId)
+    setFixtureAwayId(match.awayId)
+    setFixtureDate(match.date)
+    setFixtureTime(match.time)
+    setFixtureVenue(match.venue)
+    setFixtureRound(match.round)
+    setFixtureReason('')
+    setEditingEventId(null)
+    setEventCorrectionReason('')
+    setEventNote('')
     setHeadline(match.resultHeadline ?? '')
     setSummary(match.resultSummary ?? '')
     setWeather(match.matchReport?.weather ?? '')
@@ -96,8 +115,52 @@ export function AdminMatchManager({ rows, teams, players, loading, error, refres
     if (!match) return
     const value = Number(eventMinute)
     if (!playerId || !Number.isInteger(value) || value < 0 || value > 150) { setNotice('Choose a player and enter a valid event minute.'); return }
-    await run(async () => { const result = await api.matches.addEvent(match.id, { playerId, type: eventType, minute: value, note: eventNote.trim() || undefined }); if (result.score) { setHomeScore(String(result.score.home)); setAwayScore(String(result.score.away)) } }, 'Match event added to the live timeline.')
+    if (editingEventId && eventCorrectionReason.trim().length < 5) { setNotice('Enter a correction reason of at least five characters before editing this event.'); return }
+    if (editingEventId) {
+      await run(async () => {
+        const result = await api.matches.updateEvent(match.id, editingEventId, { playerId, type: eventType, minute: value, note: eventNote.trim() || undefined, reason: eventCorrectionReason.trim() })
+        if (result.score) { setHomeScore(String(result.score.home)); setAwayScore(String(result.score.away)) }
+      }, 'Match timeline event corrected and recorded in the audit log.')
+      setEditingEventId(null)
+      setEventCorrectionReason('')
+    } else {
+      await run(async () => { const result = await api.matches.addEvent(match.id, { playerId, type: eventType, minute: value, note: eventNote.trim() || undefined }); if (result.score) { setHomeScore(String(result.score.home)); setAwayScore(String(result.score.away)) } }, 'Match event added to the live timeline.')
+    }
     setEventNote('')
+    setPlayerId('')
+  }
+  function editEvent(item: MatchEvent) {
+    setEditingEventId(item.id)
+    setPlayerId(item.playerId)
+    setEventType(item.type)
+    setEventMinute(String(item.minute))
+    setEventNote(item.note ?? '')
+    setEventCorrectionReason('')
+    setNotice('Editing an existing timeline event. Enter a reason before saving the correction.')
+  }
+  function cancelEventEdit() {
+    setEditingEventId(null)
+    setPlayerId('')
+    setEventNote('')
+    setEventCorrectionReason('')
+  }
+  async function deleteEvent(item: MatchEvent) {
+    if (!match) return
+    const reason = window.prompt('Reason for removing this timeline event (at least five characters):')
+    if (!reason || reason.trim().length < 5) return
+    await run(() => api.matches.removeEvent(match.id, item.id, reason.trim()), 'Match timeline event removed and recorded in the audit log.')
+    if (editingEventId === item.id) cancelEventEdit()
+  }
+  async function saveFixtureDetails(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!match) return
+    if (fixtureHomeId === fixtureAwayId) { setNotice('Choose two different teams for this fixture.'); return }
+    if (completed && fixtureReason.trim().length < 5) { setNotice('Enter a correction reason of at least five characters for the confirmed fixture details.'); return }
+    await run(() => api.matches.updateDetails(match.id, completed
+      ? { date: fixtureDate, time: fixtureTime, venue: fixtureVenue, round: fixtureRound, reason: fixtureReason.trim() }
+      : { homeId: fixtureHomeId, awayId: fixtureAwayId, date: fixtureDate, time: fixtureTime, venue: fixtureVenue, round: fixtureRound }),
+      'Fixture details updated and recorded.')
+    setFixtureReason('')
   }
   async function saveReport(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -174,6 +237,21 @@ export function AdminMatchManager({ rows, teams, players, loading, error, refres
           {match.status === 'cancelled' && <p className="admin-editor-footnote">This fixture has been cancelled and cannot be started.</p>}
         </section>
 
+        <form className="panel admin-match-manager-form" onSubmit={saveFixtureDetails}>
+          <div className="admin-match-section-heading"><div><span className="eyebrow">FIXTURE DETAILS</span><h2>Edit match information</h2><p>Correct the schedule, venue or matchday details. Confirmed results keep their teams and scores protected; changes are recorded in the audit log.</p></div><CalendarDays/></div>
+          <div className="admin-match-report-grid">
+            <label>Home team<select value={fixtureHomeId} disabled={completed || match.status !== 'scheduled'} onChange={e => setFixtureHomeId(e.target.value)}>{teams.map(team => <option key={team.id} value={team.id}>{team.name}</option>)}</select></label>
+            <label>Away team<select value={fixtureAwayId} disabled={completed || match.status !== 'scheduled'} onChange={e => setFixtureAwayId(e.target.value)}>{teams.map(team => <option key={team.id} value={team.id}>{team.name}</option>)}</select></label>
+            <label>Match date<input type="date" required value={fixtureDate} onChange={e => setFixtureDate(e.target.value)}/></label>
+            <label>Kick-off time<input type="time" required value={fixtureTime} onChange={e => setFixtureTime(e.target.value)}/></label>
+            <label>Venue<input required maxLength={120} value={fixtureVenue} onChange={e => setFixtureVenue(e.target.value)}/></label>
+            <label>Round / matchday<input required maxLength={80} value={fixtureRound} onChange={e => setFixtureRound(e.target.value)}/></label>
+          </div>
+          {completed && <label>Correction reason (required)<input required minLength={5} maxLength={500} value={fixtureReason} onChange={e => setFixtureReason(e.target.value)} placeholder="Why are these confirmed fixture details being corrected?"/></label>}
+          <button className="button-outline" type="submit" disabled={pending || !['scheduled','completed'].includes(match.status)}><Save/> Save fixture changes</button>
+          {!['scheduled','completed'].includes(match.status) && <small className="admin-editor-footnote">Fixture details cannot be changed while this match is live or cancelled.</small>}
+        </form>
+
         {(isLive || !completed) && <form className="panel admin-match-manager-form" onSubmit={saveLiveScore}>
           <div className="admin-match-section-heading"><div><span className="eyebrow">LIVE CONTROL</span><h2>Manual live scoreboard</h2><p>Update the score and match minute from the touchline. Viewers see the new values on the next live refresh.</p></div><Activity/></div>
           <div className="admin-match-score-fields"><label>{homeName} score<input type="number" min="0" max="99" value={homeScore} onChange={e => setHomeScore(e.target.value)}/></label><label>{awayName} score<input type="number" min="0" max="99" value={awayScore} onChange={e => setAwayScore(e.target.value)}/></label><label>Match minute<input type="number" min="0" max="150" value={minute} onChange={e => setMinute(e.target.value)}/></label></div>
@@ -181,14 +259,16 @@ export function AdminMatchManager({ rows, teams, players, loading, error, refres
           {!isLive && <small className="admin-editor-footnote">Start the match before saving a live scoreboard update.</small>}
         </form>}
 
-        {(isLive || match.status === 'scheduled') && <section className="panel admin-match-manager-form">
-          <div className="admin-match-section-heading"><div><span className="eyebrow">LIVE MATCH ACTIONS</span><h2>Record goals and discipline</h2><p>Goals and own goals update the live score automatically. Yellow and red cards appear in the public match timeline.</p></div><ShieldAlert/></div>
+        {(isLive || match.status === 'scheduled' || Boolean(editingEventId)) && <section className="panel admin-match-manager-form">
+          <div className="admin-match-section-heading"><div><span className="eyebrow">LIVE MATCH ACTIONS</span><h2>{editingEventId ? 'Correct timeline event' : 'Record goals and discipline'}</h2><p>Goals and own goals update the live score automatically. Corrected events recalculate the score and are recorded in the audit log.</p></div><ShieldAlert/></div>
           <form onSubmit={addEvent} className="admin-match-event-form">
             <label>Player<select required value={playerId} onChange={e => setPlayerId(e.target.value)}><option value="">Choose a player</option>{eligiblePlayers.map(player => <option key={player.id} value={player.id}>{player.name} · {teamNames.get(player.teamId) ?? 'Team'} · #{player.number}</option>)}</select></label>
             <label>Event type<select value={eventType} onChange={e => setEventType(e.target.value as MatchEventType)}>{Object.entries(eventLabels).map(([key, label]) => <option value={key} key={key}>{label}</option>)}</select></label>
             <label>Minute<input type="number" min="0" max="150" value={eventMinute} onChange={e => setEventMinute(e.target.value)}/></label>
             <label>Event note (optional)<input value={eventNote} onChange={e => setEventNote(e.target.value)} placeholder="e.g. penalty, second yellow card"/></label>
-            <button className="button-primary" type="submit" disabled={pending || !eligiblePlayers.length}><Flag/> Add match event</button>
+            {editingEventId && <label>Correction reason<input required minLength={5} maxLength={500} value={eventCorrectionReason} onChange={e => setEventCorrectionReason(e.target.value)} placeholder="Explain the correction (5+ characters)"/></label>}
+            <button className="button-primary" type="submit" disabled={pending || !eligiblePlayers.length}><Flag/> {editingEventId ? 'Save event correction' : 'Add match event'}</button>
+            {editingEventId && <button type="button" className="button-outline" onClick={cancelEventEdit} disabled={pending}>Cancel edit</button>}
           </form>
           {!eligiblePlayers.length && <p className="admin-editor-footnote">Register players for both teams before recording player events.</p>}
         </section>}
@@ -208,14 +288,15 @@ export function AdminMatchManager({ rows, teams, players, loading, error, refres
             <label>Red cards, yellow cards and major incidents<textarea maxLength={2000} rows={3} value={incidents} onChange={e => setIncidents(e.target.value)} placeholder="Summarise dismissals, bookings, injuries, delays, protests or other unforeseen circumstances. Individual card events can also be recorded above."/></label>
             <label>Additional match notes<textarea maxLength={2000} rows={3} value={notes} onChange={e => setNotes(e.target.value)} placeholder="Other relevant information for viewers…"/></label>
             <label className="admin-match-featured"><input type="checkbox" checked={featured} onChange={e => setFeatured(e.target.checked)}/> Feature this result on the tournament homepage</label>
-            <div className="admin-editor-actions"><button className="button-publish" type="submit" disabled={pending}><Save/> Save match report</button><input ref={imageRef} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={uploadImage}/><button type="button" className="button-outline" disabled={pending} onClick={() => imageRef.current?.click()}><Upload/> Upload match image</button></div>
+            {match.highlightImageUrl && <div className="admin-match-image-preview"><span className="eyebrow">CURRENT MATCH PHOTOGRAPH</span><a href={match.highlightImageUrl} target="_blank" rel="noreferrer" aria-label="Open current match photograph in a new tab" style={{ backgroundImage: 'url("' + match.highlightImageUrl + '")' }}/></div>}
+            <div className="admin-editor-actions"><button className="button-publish" type="submit" disabled={pending}><Save/> Save match report</button><input ref={imageRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" hidden onChange={uploadImage}/><button type="button" className="button-outline" disabled={pending} onClick={() => imageRef.current?.click()}><Upload/> {match.highlightImageUrl ? 'Replace match image' : 'Upload match image'}</button></div>
           </form>
         </section>
 
         <section className="panel admin-match-manager-form">
           <div className="admin-match-section-heading"><div><span className="eyebrow">MATCH TIMELINE</span><h2>Events recorded</h2></div><span>{events.length} events</span></div>
           {eventQuery.error ? <p className="form-error">Event timeline could not be loaded. {eventQuery.error instanceof Error ? eventQuery.error.message : ''}</p> : !events.length ? <p className="admin-editor-footnote">No goal, assist or card events have been recorded for this match.</p> :
-            <div className="admin-match-events">{events.map(item => <div className="admin-match-event-row" key={item.id}><b>{item.minute}'</b><span className={'admin-event-icon event-' + item.type}>{item.type === 'yellow_card' ? '🟨' : item.type === 'red_card' ? '🟥' : item.type === 'goal' || item.type === 'own_goal' ? '⚽' : '↗'}</span><div><strong>{eventLabels[item.type]}</strong><small>{item.player?.name ?? 'Player'} · {item.player?.teamName ?? 'Team'}{item.note ? ' · ' + item.note : ''}</small></div></div>)}</div>}
+            <div className="admin-match-events">{events.map(item => <div className="admin-match-event-row" key={item.id}><b>{item.minute}'</b><span className={'admin-event-icon event-' + item.type}>{item.type === 'yellow_card' ? '🟨' : item.type === 'red_card' ? '🟥' : item.type === 'goal' || item.type === 'own_goal' ? '⚽' : '↗'}</span><div><strong>{eventLabels[item.type]}</strong><small>{item.player?.name ?? 'Player'} · {item.player?.teamName ?? 'Team'}{item.note ? ' · ' + item.note : ''}</small></div><div className="admin-event-actions"><button type="button" className="button-outline" disabled={pending} onClick={() => editEvent(item)}>Edit</button><button type="button" className="button-outline" disabled={pending} onClick={() => deleteEvent(item)}>Remove</button></div></div>)}</div>}
         </section>
 
         {(isLive || match.status === 'scheduled') && <section className="admin-match-finish-row"><div><h3>Ready to confirm full time?</h3><p>Publish the final score, timeline and report. This locks match events as an official result.</p></div><button type="button" className="button-publish" disabled={pending} onClick={publishFullTime}><Square/> Confirm full time and publish</button></section>}

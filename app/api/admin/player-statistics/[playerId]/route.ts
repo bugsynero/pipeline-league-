@@ -23,6 +23,7 @@ export async function PATCH(request: NextRequest, context: Context) {
     if (!player) return NextResponse.json({ code: 'PLAYER_NOT_FOUND', message: 'Registered player not found.' }, { status: 404 })
 
     const body = await request.json()
+    const previous = await PlayerTournamentStatsModel.findOne({ playerId }).lean()
     const patch: Record<string, unknown> = {}
     for (const field of numericFields) {
       if (body[field] === undefined) continue
@@ -51,7 +52,8 @@ export async function PATCH(request: NextRequest, context: Context) {
 
     const reason = typeof body.reason === 'string' ? body.reason.trim() : ''
     const disciplineChanged = ['yellowCards', 'redCards', 'suspendedForMatchId'].some(field => body[field] !== undefined)
-    if (disciplineChanged && reason.length < 5) return NextResponse.json({ code: 'REASON_REQUIRED', message: 'Enter a reason of at least five characters for a card or suspension update.' }, { status: 400 })
+    const scoringChanged = ['goals', 'assists', 'appearances'].some(field => body[field] !== undefined)
+    if ((disciplineChanged || scoringChanged) && reason.length < 5) return NextResponse.json({ code: 'REASON_REQUIRED', message: 'Enter a correction reason of at least five characters for any player-statistics update.' }, { status: 400 })
     if (reason) {
       if (reason.length > 500) return NextResponse.json({ code: 'INVALID_REASON', message: 'The reason must be 500 characters or fewer.' }, { status: 400 })
       patch.reason = reason
@@ -69,7 +71,12 @@ export async function PATCH(request: NextRequest, context: Context) {
       action: disciplineChanged ? 'player.discipline.updated' : 'player.scorers.updated',
       resource: 'player-statistics',
       resourceId: playerId,
-      metadata: { fields: Object.keys(patch), reason: updated.reason ?? '' },
+      metadata: {
+        fields: Object.keys(patch),
+        before: previous ? Object.fromEntries(Object.keys(patch).filter(key => numericFields.includes(key as typeof numericFields[number])).map(key => [key, (previous as any)[key]])) : null,
+        after: Object.fromEntries(Object.keys(patch).map(key => [key, patch[key]])),
+        reason: updated.reason ?? '',
+      },
     })
     const rows = await getManualPlayerStatistics(true)
     return NextResponse.json(rows.find(row => row.id === playerId) ?? { playerId, ...updated.toObject() })
