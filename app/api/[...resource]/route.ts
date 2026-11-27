@@ -201,8 +201,8 @@ if(resource==='matches'&&id&&sub==='live-score') { const a=await auth(request,'m
     }
     const home=String(patch.homeId??current.homeId),away=String(patch.awayId??current.awayId)
     if(home===away)return fail('A match must have two different teams.')
-    if(patch.date!==undefined&&(!/^\\d{4}-\\d{2}-\\d{2}$/.test(String(patch.date))||Number.isNaN(Date.parse(String(patch.date)+'T00:00:00'))))return fail('Enter a valid match date.')
-    if(patch.time!==undefined&&!/^([01]\\d|2[0-3]):[0-5]\\d$/.test(String(patch.time)))return fail('Enter a valid kick-off time in HH:MM format.')
+    if(patch.date!==undefined&&(!/^\d{4}-\d{2}-\d{2}$/.test(String(patch.date))||Number.isNaN(Date.parse(String(patch.date)+'T00:00:00'))))return fail('Enter a valid match date.')
+    if(patch.time!==undefined&&!/^([01]\d|2[0-3]):[0-5]\d$/.test(String(patch.time)))return fail('Enter a valid kick-off time in HH:MM format.')
     if(patch.venue!==undefined&&(typeof patch.venue!=='string'||!patch.venue.trim()||patch.venue.trim().length>120))return fail('Enter a venue of 1 to 120 characters.')
     if(patch.round!==undefined&&(typeof patch.round!=='string'||!patch.round.trim()||patch.round.trim().length>80))return fail('Enter a matchday/round of 1 to 80 characters.')
     for(const key of ['date','time','venue','round'])if(typeof patch[key]==='string')patch[key]=patch[key].trim()
@@ -243,7 +243,7 @@ export async function DELETE(request: NextRequest, context: Ctx) {
    await MatchEventModel.deleteOne({_id:eventId,matchId:id})
    const standingsSnapshotInvalidated=scoreChanged&&match.status==='completed'&&match.confirmedAt?await invalidatePublishedStandingsSnapshot():null
    await audit(a.user,'match.event.deleted','match-event',eventId,{matchId:id,type:event.type,reason:deletionReason,standingsSnapshotInvalidated:Boolean(standingsSnapshotInvalidated),previousStandingsPublishedAt:standingsSnapshotInvalidated})
-   return new NextResponse(null,{status:204})return new NextResponse(null,{status:204})
+   return new NextResponse(null,{status:204})
   }
   if(resource==='matches'||resource==='fixtures') {
     const area=resource==='fixtures'?'fixtures':'matches'
